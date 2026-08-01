@@ -65,8 +65,9 @@ mapping table for the top overlapping series and let the agent pick by need
 
 ## 2. BIS — Bank for International Settlements
 
-> **Status: client and MCP tools built** (navi `fff84bf`, meida `b05a7c2`).
-> Remaining work is the document-store catalog export.
+> **Status: done.** Client + MCP tools (navi `fff84bf`, meida `b05a7c2`) plus the
+> document-store catalog (22 flows / ~26.9k series). See the
+> [BIS reference](../meida/api/bis.md).
 
 **Access (verified).** SDMX 2.1 API at `https://stats.bis.org/api/v1`, plus a
 data portal at <https://data.bis.org/> and **bulk CSV** at
@@ -129,6 +130,10 @@ republishes selected BIS property-price and credit-gap series.
 ---
 
 ## 3. Polymarket
+
+> **Sequenced after Clio-Infra — research-first.** Before building: understand how
+> its markets/prices work and sketch a couple of concrete scenarios where the event
+> probabilities are useful; implement only if it proves easy.
 
 **Access (partly verified).** Public docs at <https://docs.polymarket.com>, with
 a machine-readable index at `llms.txt`. Read access needs **no authentication**.
@@ -348,35 +353,56 @@ loader; the splice is the fiddly part).
 
 ## Priority
 
-Guiding principle: **financial sources first, then demographic, then other.**
+Guiding principle: **financial first, then demographic, then other** — and within
+that, **easy sources before hard.** Financial (FRED, Tiingo, BLS, BIS) is **done**;
+the sequence below is the working roadmap.
 
-| Tier | Source | Status / note |
+### Build sequence
+
+1. **CDC** — health leg (deaths of despair, life expectancy). Socrata, no token. *(easy)*
+2. **Voteview** — cheap half of elite cohesion (DW-NOMINATE overlap, bipartisan
+   fraction). CSV, no auth, + a reduction pass. *(easy)*
+3. **Clio-Infra** — historical backbone (real wages, inequality, life expectancy,
+   ~1500→). Excel loader, no API. *(easy)*
+4. **Polymarket** — **research first**: understand how its markets/prices work and
+   sketch a couple of concrete scenarios where the event probabilities are useful;
+   implement only if it proves easy. Pulled up from the Other tier (§3).
+
+   → **Milestone:** with CDC + Voteview + Clio-Infra + Polymarket there is enough
+   data to stand up the **trading analysis pipeline (yada)** and begin the **SDT
+   work**.
+
+5. **Trading infrastructure** — the next build-out (beyond this source list).
+6. **LittleSis + Congress.gov** — potentially **original research**; do an
+   **academic literature review first** to ground the method before building.
+   Deferred — likely a while out.
+7. **FRED/BLS overlap** — **deferred** (not worth solving yet; the human resolves
+   it at selection today). Logged in [known-issues.md](../known-issues.md).
+8. **Seshat** — separate cliodynamics project; whenever.
+
+### By tier
+
+| Tier | Source | Note |
 | --- | --- | --- |
-| **Financial** | BIS | Client + MCP tools **done**; catalog export remains |
-| **Financial** | FRED/BLS overlap | Correctness task — bites once both catalogs are indexed |
-| **Demographic (SDT)** | CDC + Voteview | Token-free/no-auth; health + cheap cohesion legs; fit the series model |
-| **Demographic (SDT)** | Clio-Infra | Historical backbone (§9); Excel loader, no API |
-| **Demographic (SDT)** | Congress.gov | Cosponsorship + Record text; needs a free key |
-| **Other** | LittleSis | Corporate/ownership graph (finance-adjacent) |
-| **Other** | Polymarket | Event probabilities; own storage model |
-| **Other** | Seshat (cliodynamics) | Separate research project (§6) |
+| **Financial** | FRED · Tiingo · BLS · BIS | **done** — clients + MCP tools + catalogs |
+| **Financial** | FRED/BLS overlap | correctness task; yada-gated |
+| **Demographic (SDT)** | CDC · Voteview | token-free/no-auth; health + cheap cohesion legs; fit the series model |
+| **Demographic (SDT)** | Clio-Infra | historical backbone (§9); Excel loader, no API |
+| **Demographic (SDT)** | Congress.gov | cosponsorship + Record text + policy→sector; key + graph/NLP — **lit review first** |
+| **Other** | Polymarket | forward-looking event probabilities; **research first**, after Clio-Infra (§3) |
+| **Other** | LittleSis | corporate/ownership graph; **lit review first** (§4) |
+| **Other** | Seshat (cliodynamics) | separate research project (§6) |
 
-**Financial tier.** BIS is the immediate next step — its client and tools exist,
-so only the catalog export remains. FRED/BLS overlap sits here too: it is a
-*correctness* problem, not a feature — the moment both catalogs are in the vector
-store the same statistic appears twice with no basis for the agent to choose, and
-BIS slightly enlarges it (FRED republishes selected BIS series).
-
-**Demographic tier.** The structural demographic theory project. CDC + Voteview
-lead it: both unauthenticated, both a thin loader over the existing series model,
-together delivering two SDT legs (contemporary health; the cheap half of elite
-cohesion) in a few days. Clio-Infra and Congress cost more (Excel parsing; a key
-plus graph/text machinery). See
-[structural-demographic-theory.md](structural-demographic-theory.md).
-
-**Other.** LittleSis is finance-adjacent (corporate ownership/control) and could
-rise if corporate-structure questions become relevant; Polymarket and Seshat both
-need storage models the stack does not yet have.
+**Why this order.** The demographic easy-three (CDC, Voteview, Clio-Infra) are
+thin loaders over the existing series model — a few days each — delivering the SDT
+immiseration, cohesion, and historical legs. **Polymarket** is pulled up because
+it is the one *forward-looking* signal (implied event probabilities) and, with the
+easy three, rounds out enough data to stand up the trading pipeline and SDT; it
+needs its own storage model, so it gets a research pass first. The graph/text
+sources — **LittleSis** and **Congress.gov** — verge on original research and wait
+on a literature review; **Seshat** is a separate project. See
+[structural-demographic-theory.md](structural-demographic-theory.md) for how the
+demographic sources combine.
 
 > The numbered sections above are in discovery order and act as a reference
-> catalog; this table is the actual roadmap.
+> catalog; this sequence is the actual roadmap.

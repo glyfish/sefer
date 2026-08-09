@@ -65,21 +65,47 @@ these before querying — schemas differ per dataset.
 The SDT health slice (not the whole portal). Each needs its own field mapping:
 
 | id | dataset | shape | → series |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **w9j2-ggv5** | Death rates & life expectancy, **1900–2018** | `year × race × sex` → `{average_life_expectancy, mortality}` | (metric, race, sex) over year |
 | **9j2v-jamp** | Suicide death rates, **1950→** | NCHS "stub" schema: `indicator / unit / stub_label / age / year → estimate` | (stub_label, age) over year |
 | **xkb8-kh2a** | Provisional drug-overdose death counts | `state × month × indicator(drug) → data_value` | (state, drug) over year-month |
-| *alcohol* | alcohol-induced deaths — **to find** | TBD | completes the despair triad |
+| **hksd-2xuw** | Chronic Disease Indicators — **Alcohol topic**, 2019–2022 | long: `topic/questionid × location(state) × stratification × yearstart → datavalue` (typed by `datavaluetype`/`datavalueunit`) | ALC08 consumption + ALC06 binge (**exposures**); ALC09 chronic-liver mortality (**alcohol-death proxy**) |
 
 Facet values are precise. For `w9j2-ggv5`: races `All Races / Black / White` (only
 these — no Hispanic/Asian breakdown), sexes `Both Sexes / Female / Male`.
 
 ## Deaths of despair
 
-= drug overdose + suicide + **alcohol** (Case & Deaton). We have overdose
-(`xkb8-kh2a`) and suicide (`9j2v-jamp`); the alcohol leg is still to be sourced.
-The catalog holds the **components**; the composite (their sum, for working-age
-adults) is an **analysis-side** construct (alef/yada), not stored raw.
+= drug overdose + suicide + **alcohol** (Case & Deaton). Overdose (`xkb8-kh2a`)
+and suicide (`9j2v-jamp`) each have a dedicated dataset; **alcohol does not** — an
+exhaustive catalog sweep found **no alcohol-induced-deaths dataset on the Socrata
+portal** (see *The alcohol leg* below). The catalog holds the **components**; the
+composite (their sum, for working-age adults) is an **analysis-side** construct
+(alef/yada), not stored raw.
+
+## The alcohol leg
+
+Alcohol harm is **multi-channel** and no single Socrata dataset captures it as
+deaths, so we curate what exists and defer the exact measure:
+
+- **Chronic disease (liver).** `hksd-2xuw` question **ALC09** "Chronic liver
+  disease mortality, underlying cause" (annual 2019–2022, state-level, counts +
+  crude/age-adjusted rates) — the recognized but **imperfect proxy** (over-counts
+  non-alcohol liver disease: hepatitis, NAFLD; under-counts non-liver alcohol
+  deaths). Also in `489q-934x` (VSRR, quarterly, provisional, rates only), which
+  co-hosts suicide + overdose.
+- **Risk-factor exposures.** `hksd-2xuw` **ALC08** per-capita consumption
+  (gallons) and **ALC06** binge-drinking prevalence — alcohol *use*, curated as
+  **exposures, not deaths**. ⚠️ At the state-aggregate level these correlate **~0**
+  with liver mortality (pooled cross-state Pearson r ≈ −0.04 for both) — ecological
+  confounding (sales ≠ resident drinking, demographics, tourism). Not a proxy
+  shortcut; a real use→mortality link needs individual/panel modeling (alef/yada).
+- **Acute injury.** `haed-k2ka` alcohol-impaired *driving* deaths — a different
+  (injury) channel, but a **frozen 2005–2014 cumulative total per state**, not a
+  time series (the live version is NHTSA FARS, off-Socrata).
+- **The exact measure** — the ICD-10 *alcohol-induced causes* grouping (alcoholic
+  liver disease + poisoning + cardiomyopathy + …) — is **CDC WONDER-only**, no
+  Socrata mirror. Deferred to a future WONDER source.
 
 ## Data quirks
 
@@ -93,6 +119,9 @@ adults) is an **analysis-side** construct (alef/yada), not stored raw.
   rolling **12-month-ending** window (`period`).
 - **CDC WONDER** (finer mortality-by-cause/age) is a separate, harder source
   (XML-POST) — out of scope for this Socrata pass.
+- **"AH" means "Ad Hoc"**, not alcohol — the `AH Provisional … Death Counts`
+  family (`qdcb-uzft` Diabetes, Cancer, Sickle Cell) has **no alcohol member**;
+  don't chase it looking for an alcohol sibling.
 
 ## The integration (built)
 
@@ -113,25 +142,70 @@ navi `CdcClient` (`lib/clients/cdc.py`) wraps the API:
 **Config** in `lib/env.py`: `get_cdc_api_key()` (`CDC_API_KEY`, optional →
 `X-App-Token`) and `get_cdc_base_url()` (`CDC_BASE_URL`).
 
-**Notebooks** (`notebooks/cdc/`): `api.ipynb` (discover → inspect → query → plot,
-incl. life expectancy broken out by sex and race via `plot_cdc_series_by`) and
-`discovery.ipynb` (browse the catalog by category/tag → drill into datasets).
+**Notebooks + code** (`notebooks/cdc/`): `api.ipynb` (discover → inspect → query →
+plot), `discovery.ipynb` (browse by category/tag), `series_over_multipe_data_sets.ipynb`
+(stitch history + current across datasets — suicide 1950→2024, life expectancy
+1900→2020, the VSRR despair triad), and `catalog.py` + `catalog.ipynb` (the registry
+and series-catalog generator; see *Series catalog* below).
 
 > The notebooks drive the **running** MCP server, which does not hot-reload — after
 > adding/changing tools, fully restart it (and watch for an orphan holding `:8080`).
 
 ---
 
-## Catalog export — planned
+## Series catalog (built)
 
-Not yet built. Following the FRED/BLS/BIS model, the export will curate the
-datasets above and pivot each into series records via a **dataset registry** — per
-dataset a `{time_field, value_field(s), facet_fields, unit}` mapping — emitting a
-CDC catalog YAML (metadata only; observations fetched on demand). Because schemas
-differ per dataset, the registry is the real work, not the fetch.
+The **registry** (`notebooks/cdc/catalog.py`) is CDC's hand-written stand-in for
+BIS's SDMX structure — ~10 dataset specs (field maps + value-normalization + three
+special-case handlers). `export_cdc_catalog()` walks each spec and writes the
+**series catalog** to `notebooks/cdc/data/` (gitignored, regenerable; run via
+`catalog.ipynb`): a `dataset.yaml` index + one `cdc_series_<group>.yaml` per source
+group. **~2,502 atomic series** — one per facet permutation, like FRED/BIS.
+
+Each entry carries **its exact `cdc_series_data` arguments** (`dataset_id` +
+`where` + `select`) plus descriptive metadata (`concept`, `unit`, `frequency`,
+`cadence`, `provisional`, `observation_start/end`, normalized `facets`). The agent
+therefore **replays a stored recipe** from the document store — it never authors
+SoQL nor guesses a facet value. `server.py` is unchanged: `cdc_series_data` stays
+the raw-SoQL executor (also handy for exploration); `cdc_discover` /
+`cdc_dataset_columns` / `cdc_categories` / `cdc_tags` are dev-only.
+
+| group | series | concepts |
+| --- | --- | --- |
+| `hksd-2xuw` | 1,816 | alcohol_consumption, alcohol_binge, chronic_liver_mortality |
+| `xkb8-kh2a` | 424 | drug_overdose |
+| `le_snapshots` | 156 | life_expectancy (state, 2018–2021, union) |
+| `9j2v-jamp` | 42 | suicide (history 1950–2018) |
+| `w26f-tf3h` | 28 | suicide (current 2018–2024) |
+| `w9j2-ggv5` | 18 | life_expectancy, mortality (1900–2018) |
+| `489q-934x` | 18 | suicide, drug_overdose, chronic_liver_mortality (VSRR) |
+
+**How the registry tames the mess:**
+
+- **Two pivot modes** — *cross* (independent columns: `w9j2` race×sex, `xkb8`
+  state×drug) and *stratified* (one active stratification per row + an optional
+  location cross: `hksd` state × {Overall|Sex|Race|Age}; `w26f` is national).
+- **Reality-driven** — a per-spec `group_by … WHERE value IS NOT NULL` enumerates
+  only combos that exist, so suppressed cells, non-curated strata (`Grade`),
+  overlapping age aggregates, and meta drug indicators never become entries.
+- **Value normalization** — one canonical vocabulary maps to each dataset's exact
+  literal (`white` → `White` / `White only, non-Hispanic` / `White, non-Hispanic`),
+  so the same token works across datasets.
+- **Three special-case handlers** — the suicide **stub parser** (`9j2v` splits the
+  colon-delimited `stub_label` into sex/race/age), the LE **snapshot union** (four
+  single-year datasets → one per-`(area, sex)` series with a multi-source recipe),
+  and the VSRR **column-melt** (`489q-934x` state/sex live in wide columns → the
+  value column is chosen in `select`).
 
 ### Known gaps
 
-- **Alcohol dataset** not yet found (deaths-of-despair third leg).
-- **Catalog export** not built — the dataset registry + series pivot remain.
-- **`xkb8-kh2a` is provisional** and revised; treat its values as preliminary.
+- **Alcohol** has no dedicated Socrata deaths dataset — curated as the ALC09
+  chronic-liver proxy + ALC08/ALC06 use exposures (`hksd-2xuw`); the exact
+  alcohol-induced grouping awaits a future **CDC WONDER** source.
+- **Life expectancy caps at 2020** nationally on Socrata (recent years are the
+  state-snapshot union 2018–2021; national only via each snapshot's US row,
+  2018–2020). Extending past 2020 needs a non-Socrata NVSR pull — **dropped**;
+  CDC stays Socrata-only.
+- **`xkb8-kh2a` / `489q-934x` are provisional** and revised (injury deaths lag) —
+  each entry's `provisional` flag and `observation_end` (= last populated) reflect
+  this; treat the most-recent quarters as preliminary.

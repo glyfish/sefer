@@ -266,6 +266,11 @@ also makes it a RAG candidate rather than a numeric one.
 
 ## 7. CDC — public health statistics
 
+> **Status: done.** Client + MCP tools + exploration notebooks (navi `ad90575`,
+> meida `b6403c2`) plus the series catalog — hand-written registry +
+> `export_cdc_catalog()`, ~2,502 atomic series across 10 datasets (meida
+> `c585ee1`). See the [CDC reference](../meida/api/cdc.md).
+
 **Access (verified).** Socrata API at `data.cdc.gov/resource/<id>.json` (also
 CSV). **No token required** for reads (an app token raises rate limits). Rows
 returned live without auth. Discovery via the Socrata catalog API.
@@ -359,7 +364,8 @@ the sequence below is the working roadmap.
 
 ### Build sequence
 
-1. **CDC** — health leg (deaths of despair, life expectancy). Socrata, no token. *(easy)*
+1. **CDC** — health leg (deaths of despair, life expectancy). Socrata, no token.
+   *(easy)* — **✅ done** (§7).
 2. **Voteview** — cheap half of elite cohesion (DW-NOMINATE overlap, bipartisan
    fraction). CSV, no auth, + a reduction pass. *(easy)*
 3. **Clio-Infra** — historical backbone (real wages, inequality, life expectancy,

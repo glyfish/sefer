@@ -355,7 +355,7 @@ The `fetch_*` methods return pandas DataFrames and are the read path for the
 
 | Concern | Mechanism |
 |---|---|
-| Python | 3.11.2 via pyenv (`.python-version`, virtualenv `alef-3.11.2`) |
+| Python | 3.14.7 via pyenv (`.python-version`, virtualenv `alef-3.14.7`) |
 | Dependencies | `requirements.in` → pip-compiled `requirements.txt` |
 | navi resolution | editable install `-e ../navi`; pyright `extraPaths` |
 | `PYTHONPATH` | `.env` prepends the alef root; VSCode loads it via `python.envFile` |
@@ -522,7 +522,7 @@ in navi must be updated to match (see §10).
 ## 12. Runtime
 
 ```bash
-pyenv activate alef-3.11.2
+pyenv activate alef-3.14.7
 pip install -r requirements.txt          # includes -e ../navi
 
 alembic upgrade head                     # create/update backtest schema

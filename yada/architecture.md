@@ -286,9 +286,12 @@ views `UNION ALL` the three modes with a `mode` column. `public.price_series` ho
 prices. Future domains (e.g. portfolios) follow the same pattern: own schema, same migration
 chain. The whole schema is one rolled-up alembic revision (`0001_initial_schema`).
 
-**Environments.** There is one database per environment (`yada`, `yada_dev`), selected by
-`YADA_DB_URL`; the app, `BacktestDb`, and Alembic all follow that one variable, so the cache,
-reports, and backtest tables can never be mismatched across environments.
+**Environments.** There is one database per environment -- `yada_dev` for `dev`, `yada` for
+`prod` -- selected by `YADA_ENV` (default `dev`, so nothing lands on production data by
+accident). `apps/core/environment.py` is the single resolver: the caches, `TradingDb`, and
+Alembic all use it, so the cache, reports, and trading tables can never be mismatched across
+environments. On startup the API logs the environment and refuses to serve unless the database
+is at the code's Alembic head with the trading schemas present.
 
 ### ChromaDB
 

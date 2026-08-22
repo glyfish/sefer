@@ -271,12 +271,20 @@ plots**, even if the cache entry has aged out, while fetch paths re-fetch on exp
 | `metadata` | JSONB — the **merged** metadata of its series (GIN indexed). |
 | `time_range_from`, `time_range_to` | Report window. A null `to` means "track the latest data". |
 
-**`backtest` schema** — the backtrader persistence tables (`backtests`, `broker`, `positions`,
-`trades`, `orders`, `analyzers`, `indicators`, `asset_prices`, `price_series`), declared as ORM
-models in `apps/backtrader/db/backtest_db.py` and created by revision `0004`. Keeping them in
-their own schema inside the same database gives the backtest domain its own namespace (and a
-wholesale `DROP SCHEMA` cleanup path) while still allowing joins and foreign keys against the
-cache. Future domains (e.g. portfolios) follow the same pattern.
+**Trading schemas.** The same strategy code runs in three modes -- `backtest` (historical
+simulation), `paper` (sandbox broker) and `live` (real fills) -- and writes the same records
+(`runs`, `orders`, `trades`, `positions`, `broker`, `analyzers`, `indicators`, `asset_prices`)
+into a schema named after the mode. The table set is defined once, in
+`apps/backtrader/db/trading_db.py`, and instantiated per schema. The `trading` schema holds what
+is shared: `strategy_configs` -- the unit that is promoted through the pipeline, identified by a
+hash of strategy + params (JSONB) + universe, registered automatically by the first run that
+executes it -- and `promotions`, the audit log of stage changes (`exploratory` -> `paper` ->
+`live` -> `retired`), each recording the run that justified the move. Every `runs` row carries
+its `config_id` and a `tier` (`exploratory` runs are disposable; `production` runs back a promoted
+config), so backtest-vs-paper-vs-live comparison is a join on `config_id`; the `trading.*_all`
+views `UNION ALL` the three modes with a `mode` column. `public.price_series` holds reference
+prices. Future domains (e.g. portfolios) follow the same pattern: own schema, same migration
+chain. The whole schema is one rolled-up alembic revision (`0001_initial_schema`).
 
 **Environments.** There is one database per environment (`yada`, `yada_dev`), selected by
 `YADA_DB_URL`; the app, `BacktestDb`, and Alembic all follow that one variable, so the cache,

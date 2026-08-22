@@ -271,6 +271,17 @@ plots**, even if the cache entry has aged out, while fetch paths re-fetch on exp
 | `metadata` | JSONB — the **merged** metadata of its series (GIN indexed). |
 | `time_range_from`, `time_range_to` | Report window. A null `to` means "track the latest data". |
 
+**`backtest` schema** — the backtrader persistence tables (`backtests`, `broker`, `positions`,
+`trades`, `orders`, `analyzers`, `indicators`, `asset_prices`, `price_series`), declared as ORM
+models in `apps/backtrader/db/backtest_db.py` and created by revision `0004`. Keeping them in
+their own schema inside the same database gives the backtest domain its own namespace (and a
+wholesale `DROP SCHEMA` cleanup path) while still allowing joins and foreign keys against the
+cache. Future domains (e.g. portfolios) follow the same pattern.
+
+**Environments.** There is one database per environment (`yada`, `yada_dev`), selected by
+`YADA_DB_URL`; the app, `BacktestDb`, and Alembic all follow that one variable, so the cache,
+reports, and backtest tables can never be mismatched across environments.
+
 ### ChromaDB
 
 Persisted under `.db/`, one collection per catalog: **etf**, **fred**, **github**,

@@ -9,8 +9,8 @@ alongside it (see [README](README.md)).
 | Repo | Role |
 | --- | --- |
 | **navi** | Shared library (the importable package is named `lib`; consumers install it via `-e ../navi`). Owns the data **clients** and the **model code** — reusable algorithm implementations (indicators, strategies, estimators, stats) plus plot/db utils. |
-| **meida** | Data-access **API** — an MCP server exposing navi's clients as tools and building the metadata catalogs (FRED, Tiingo, BLS, BIS). |
-| **alef** | Model **development & testing** — where algorithms are prototyped and validated, **on simulated data first**, against navi's model primitives. |
+| **meida** | Data-access **API** — an MCP server exposing navi's clients as tools and building the metadata catalogs (FRED, Tiingo, BLS, BIS). Owns navi's `lib/clients`. |
+| **alef** | Model **development & testing** — where algorithms are prototyped and validated, **on simulated data first**, against navi's model primitives. Owns navi's `lib/data`, `lib/models`, `lib/plots` and `lib/trading`, and holds their tests. |
 | **yada** | The **analysis pipeline** — applies the models to *real* data, plus the data stores (Postgres, vector), plotting, reporting, and the agentic frontend. |
 
 (`website`, the public site, is a separate legacy repo — not covered here yet.)

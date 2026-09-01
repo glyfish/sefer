@@ -200,12 +200,15 @@ the raw-SoQL executor (also handy for exploration); `cdc_discover` /
 ### Known gaps
 
 - **Alcohol** has no dedicated Socrata deaths dataset — curated as the ALC09
-  chronic-liver proxy + ALC08/ALC06 use exposures (`hksd-2xuw`); the exact
-  alcohol-induced grouping awaits a future **CDC WONDER** source.
+  chronic-liver proxy + ALC08/ALC06 use exposures (`hksd-2xuw`). The exact
+  alcohol-induced series now comes from **CDC WONDER** — built (`WonderClient`
+  in navi, `notebooks/cdc/wonder.ipynb`); see [wonder-nvsr.md](wonder-nvsr.md).
 - **Life expectancy caps at 2020** nationally on Socrata (recent years are the
   state-snapshot union 2018–2021; national only via each snapshot's US row,
-  2018–2020). Extending past 2020 needs a non-Socrata NVSR pull — **dropped**;
-  CDC stays Socrata-only.
+  2018–2020). Extension past 2020 comes from the **NVSR life-table Excel files
+  on FTP** (final 2024 = 79.0, above pre-COVID) — the earlier "dropped, Socrata
+  only" call was reversed once the files proved machine-readable; see
+  [wonder-nvsr.md](wonder-nvsr.md).
 - **`xkb8-kh2a` / `489q-934x` are provisional** and revised (injury deaths lag) —
   each entry's `provisional` flag and `observation_end` (= last populated) reflect
   this; treat the most-recent quarters as preliminary.

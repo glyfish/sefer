@@ -1,8 +1,9 @@
-# PostgreSQL Data Store
+# PostgreSQL Time-Series Tables
 
-The relational store. Holds **observation data** (cached time series) and **user artifacts**
-(saved reports). Everything here is authored or fetched by YADA itself — unlike the ChromaDB
-stores, which are catalogs of external reference material.
+The relational store — the `time_series_*` tables. Holds **observation data** (cached and
+source-of-truth series) and **user artifacts** (saved reports). Everything here is authored or
+fetched by YADA itself — unlike the `data-store-*` docs, which describe ChromaDB **metadata
+document stores** catalogging external reference material.
 
 See [architecture.md](architecture.md) for how this fits the wider system.
 
@@ -89,6 +90,16 @@ Reads accept `include_expired`:
   via an upsert that deliberately does *not* touch it.
 - **Report paths** pass `include_expired=True`, so a saved report **always plots** even if its
   series aged out.
+
+---
+
+## `time_series_source` — moved
+
+This table lives in **meida's** database, not yada's. meida owns the file-delivered
+sources (CDC WONDER, NVSR) and exposes them over MCP, so yada consumes them the same
+way it consumes FRED — through a `CachingDataTool`, into `time_series_cache`.
+
+See [meida/time-series-source.md](../meida/time-series-source.md).
 
 ---
 

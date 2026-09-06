@@ -356,6 +356,62 @@ loader; the splice is the fiddly part).
 
 ---
 
+## 10. CMS — Medicare, Medicaid, and health expenditure
+
+> **Status: evaluated, mostly skip.** Take three non-Medicare series; skip the
+> Medicare provider-payment catalogs entirely. No client needed.
+
+**Access (verified).** Four independent portals, all **PUF tier — no key, no
+DUA, no bot filter**:
+
+- [data.cms.gov](https://data.cms.gov) — 159 datasets. UUID-keyed REST at
+  `data-api/v1/dataset/{uuid}/data`, JSON with all values as strings, `.csv`
+  suffix for bulk. **Weaker than Socrata**: a `filter[State]=` query returned 0
+  rows, and JSON paging silently caps at 6,500.
+- [data.cms.gov/provider-data](https://data.cms.gov/provider-data) — 236 Care
+  Compare datasets on a separate DKAN stack (OpenAPI 3.0.2, SQL endpoint).
+- [openpaymentsdata.cms.gov](https://openpaymentsdata.cms.gov) — 74 datasets,
+  same DKAN surface, so one parameterised client would serve both.
+- [data.medicaid.gov](https://data.medicaid.gov) — 552 catalog items (~513 real;
+  39 are `CoreSEt` dev/test artifacts), plus direct CSV at `download.medicaid.gov`.
+
+The restricted tier is sharply separated and not worth pursuing: LDS files need a
+DUA and cost $100–$7,000+; RIFs need a DUA *plus* CMS Privacy Board review via
+ResDAC. Nothing above requires either.
+
+**Data.** Overwhelmingly healthcare-industry structure — provider payments
+(Physician & Other Practitioners, Inpatient/Outpatient, DME, Part D Prescribers),
+quality ratings, Open Payments. The exceptions, none of them Medicare:
+
+| Series | Shape | Access |
+| --- | --- | --- |
+| Medicaid applications + enrollment | 51 states × 109 months, 2013-09 → 2026-05 | **file** — 4.4 MB CSV |
+| ACA Exchange effectuated enrollment | 52 states × 2016–2026 monthly, 6,588 rows | **API** |
+| NHE by State of Residence | 50 states × 1991–2020 | **file** — ZIP of plain CSVs |
+
+**Evaluation.** Medicare covers 65+ and SSDI-disabled, so it is **structurally
+blind to the 25–54 cohort** where deaths of despair concentrate — the CDC leg
+(§7) dominates it on mortality. The three above earn their place by seeing the
+working-age population Medicare cannot: Medicaid *applications submitted* is a
+responsive distress flow rather than an enrollment stock, and ACA *effectuated*
+enrollment counts premiums actually paid, so it reads as affordability rather
+than intent. NHE adds a state panel for health-cost burden.
+
+Architecturally these need **no new client**: the two file sources fit the
+WONDER/NVSR source-table pattern, and the ACA set is small enough (6,588 rows)
+to fetch whole.
+
+**Challenges.** The catalog's `temporal` field **lies about coverage** — it
+reports the latest vintage, not the span (one dataset advertised a single month
+while holding 2013–2026). Verify ranges by querying, never from metadata. NHE
+state estimates stop at 2020 and are not being extended, so they splice to
+nothing recent. CMS bulk URLs change annually.
+
+**Value:** low–moderate — three useful series, no mortality gain over CDC.
+**Effort:** low — no client, no auth, direct downloads.
+
+---
+
 ## Priority
 
 Guiding principle: **financial first, then demographic, then other** — and within
@@ -398,6 +454,7 @@ the sequence below is the working roadmap.
 | **Other** | Polymarket | forward-looking event probabilities; **research first**, after Clio-Infra (§3) |
 | **Other** | LittleSis | corporate/ownership graph; **lit review first** (§4) |
 | **Other** | Seshat (cliodynamics) | separate research project (§6) |
+| **Other** | CMS (Medicaid · ACA · NHE) | 3 series only; no client needed — **mostly skip** (§10) |
 
 **Why this order.** The demographic easy-three (CDC, Voteview, Clio-Infra) are
 thin loaders over the existing series model — a few days each — delivering the SDT

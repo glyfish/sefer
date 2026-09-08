@@ -139,7 +139,7 @@ FRED has **no single envelope** — the wrapper varies by endpoint.
 
 ## What the integration wraps
 
-navi `FredClient` (`lib/clients/fred.py`) covers 7 of the endpoints:
+navi `FredClient` (`clients/fred.py`) covers 7 of the endpoints:
 
 | Client method | Endpoint | MCP tool |
 | --- | --- | --- |
@@ -151,7 +151,7 @@ navi `FredClient` (`lib/clients/fred.py`) covers 7 of the endpoints:
 | `get_releases` | `/releases` | `list_releases` |
 | `get_release_series` | `/release/series` | `fred_release_series` |
 
-Typed models live in `lib/clients/models/fred.py`: `CategoryResponse`,
+Typed models live in `clients/models/fred.py`: `CategoryResponse`,
 `SeriesResponse`, `ObservationsResponse`, `ReleasesResponse`. They are frozen
 and ignore undeclared fields (e.g. `group_popularity` is dropped).
 

@@ -13,7 +13,7 @@ Companion to [architecture.md](architecture.md) and the
 
 ## Why meida has a database
 
-Every other source is fetched live: a tool call reaches navi's client, which
+Every other source is fetched live: a tool call reaches the vendor client, which
 calls the provider. Two CDC sources make that impossible.
 
 | Source | Why it cannot be fetched per request |
@@ -100,7 +100,7 @@ the Python 3.14 upgrade because nothing imported them. All three come back.
 
 ## The client
 
-navi gets a `TimeSeriesSourceClient` in `lib/clients/`, beside the HTTP clients,
+navi gets a `TimeSeriesSourceClient` in `clients/`, beside the HTTP clients,
 so the uniform interface is visible in the layout. It follows the
 [§5 client pattern](architecture.md#5-the-client-pattern) with one substitution:
 where the HTTP clients take `client=` (an `httpx.AsyncClient`), this takes
@@ -120,7 +120,7 @@ class TimeSeriesSourceClient:
 Errors translate at the boundary to a `TimeSeriesSourceError`, so callers never
 see raw SQLAlchemy exceptions — the same rule the HTTP clients follow.
 
-**Testing** (in `meida/tests`, where navi's client tests live): pass a **SQLite
+**Testing** (in `meida/tests`, alongside the vendor-client tests): pass a **SQLite
 in-memory engine** with the equivalent table — the direct analog of httpx's
 `MockTransport`. Real SQL runs, no Postgres required, suite stays hermetic. This
 works only while the client's queries stay simple lookups; JSONB containment

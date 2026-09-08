@@ -288,7 +288,7 @@ pre-break value across a *series break*, the closest thing to a revision signal.
 
 ## The API integration (built)
 
-navi `BisClient` (`lib/clients/bis.py`) wraps the three resources: SDMX-JSON for
+navi `BisClient` (`clients/bis.py`) wraps the three resources: SDMX-JSON for
 structure (with the version-pinned `Accept`), CSV for data (grouped into series
 by `_parse_csv`), and `BisAPIError` on HTTP errors. Config in `lib/env.py`:
 `get_bis_base_url()` — **no key accessor, by design**. Three MCP tools in

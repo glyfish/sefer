@@ -3,7 +3,7 @@
 Reference for the two **non-Socrata** CDC mortality sources: **CDC WONDER**
 (queryable deaths-by-cause) and the **NVSR life-table files** (life expectancy).
 Companion to [cdc.md](cdc.md), which covers the Socrata API. Status: `WonderClient`
-is **built** (navi `lib/clients/wonder.py`, tests in `meida/tests`); NVSR is a
+is **built** (navi `clients/wonder.py`, tests in `meida/tests`); NVSR is a
 **planned file-based source** (manual annual downloads for now, per roadmap).
 
 Inventory compiled 2026-08-31 from the authoritative CDC pages (WONDER data

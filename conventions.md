@@ -32,9 +32,15 @@ who owns what.
   rather than in whoever installs navi next — `navi/scripts/check_imports.py`
   checks it, and nothing else should be installed into it.
 - **navi's areas have owners** — `lib/data`, `lib/models`, `lib/plots` and
-  `lib/trading` belong to **alef**; `lib/clients` belongs to **meida**. navi
-  carries no tests of its own: they live with the owner (`alef/tests`,
-  `meida/tests`). `yada` consumes the library and owns none of it.
+  `lib/trading` belong to **alef**. navi carries no tests of its own: they live
+  with the owner (`alef/tests`). `yada` consumes the library and owns none of it.
+- **The vendor clients live in meida, not navi** — `meida/clients/` holds the
+  FRED, BLS, BIS, Socrata, Tiingo and WONDER clients and their pydantic models.
+  They were in `navi/lib/clients` while navi was assumed to be the shared home
+  for everything; in practice meida is the only consumer (yada and alef import
+  none of it), and keeping them in a library shipped to three repos meant a
+  change made for meida's interface landed in yada's and alef's dependency.
+  They still import `lib.env` and `lib.logger`, which are genuinely shared.
 - **Develop algorithms on simulated data first** (in `alef`); the matured model
   code then lands in `navi`, and `yada`'s pipeline applies it to *real* data.
   Developing against synthetic data guards against overfitting to the real series.

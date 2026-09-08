@@ -104,7 +104,7 @@ Unlike FRED and BLS, Tiingo has **no response envelope**.
 
 ## What the integration wraps
 
-navi `TiingoClient` (`lib/clients/tiingo.py`) covers both daily endpoints:
+navi `TiingoClient` (`clients/tiingo.py`) covers both daily endpoints:
 
 | Client method | Endpoint | MCP tool |
 | --- | --- | --- |
@@ -114,7 +114,7 @@ navi `TiingoClient` (`lib/clients/tiingo.py`) covers both daily endpoints:
 `get_prices` assembles `startDate`/`endDate`/`resampleFreq` only when provided,
 and upper-cases the ticker on the returned series.
 
-Typed models live in `lib/clients/models/tiingo.py`: `TiingoMeta`,
+Typed models live in `clients/models/tiingo.py`: `TiingoMeta`,
 `TiingoPrice`, `TiingoPriceSeries` — frozen, with camelCase aliases.
 
 ## Configuration note

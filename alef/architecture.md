@@ -85,7 +85,7 @@ single most important thing to know before adding tests to any of these repos:
 
 | navi module | Tested in | Status |
 |---|---|---|
-| `lib/clients/`, `lib/mcp_client.py` | **meida** (`tests/`) | in place — 59 tests, `httpx.MockTransport`, no network |
+| `clients/`, `lib/mcp_client.py` | **meida** (`tests/`) | in place — 59 tests, `httpx.MockTransport`, no network |
 | `lib/models/`, `lib/data/`, `lib/stats.py`, `lib/plots/` | **alef** | planned; today covered by notebooks |
 | `lib/trading/`, `lib/db/` | alef, moving with the bots | strategies expected to move to their own project |
 
@@ -138,7 +138,7 @@ encode.
 | `lib/trading/` | `GlyfishStrategy` base, `ZScore` indicator, metrics |
 | `lib/db/backtest_db.py` | ORM + insert/fetch for backtest results |
 | `lib/utils.py` | kwargs helpers, ensemble/scan drivers, CSV readers |
-| `lib/clients/`, `lib/mcp_client.py` | Data-provider clients — used by *meida*, not alef |
+| `clients/`, `lib/mcp_client.py` | Data-provider clients — used by *meida*, not alef |
 
 navi is installed as an editable local package (`-e ../navi` in
 `requirements.in`), so `import lib.data` resolves live from the sibling

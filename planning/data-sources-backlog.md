@@ -98,8 +98,8 @@ than three per-survey encodings.
 
 **What was built.**
 
-- `lib/clients/bis.py` — `BisClient` with `get_dataflows`, `get_datastructure`,
-  `get_data`; `lib/clients/models/bis.py` — frozen models with
+- `clients/bis.py` — `BisClient` with `get_dataflows`, `get_datastructure`,
+  `get_data`; `clients/models/bis.py` — frozen models with
   `BisDataStructure.decode()`.
 - MCP tools `bis_dataflows`, `bis_datastructure`, `bis_series_data`.
 - 22 tests against fixtures captured live, including one asserting that **no

@@ -155,7 +155,7 @@ Notes:
 
 ## The API integration (built)
 
-navi `BlsClient` (`lib/clients/bls.py`) wraps the API above: POST for
+navi `BlsClient` (`clients/bls.py`) wraps the API above: POST for
 multi-series, GET for surveys/popular/latest, optional key in body/query, and
 status-field error checking (raises on `REQUEST_NOT_PROCESSED` despite HTTP 200,
 with bounded retry/backoff on transient 5xx/transport errors). Five MCP tools in

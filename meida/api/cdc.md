@@ -125,7 +125,7 @@ deaths, so we curate what exists and defer the exact measure:
 
 ## The integration (built)
 
-navi `CdcClient` (`lib/clients/cdc.py`) wraps the API:
+navi `CdcClient` (`clients/cdc.py`) wraps the API:
 
 - `query(id, where=, select=, order=, group=, limit=, offset=)` → rows; `iter_all(…)`
   pages a whole dataset.

@@ -23,8 +23,8 @@ graph TB
     end
 
     subgraph navi["navi (sibling repo)"]
-        CL["lib/clients<br/>Fred · Tiingo · Bls"]
-        MOD["lib/clients/models<br/>pydantic"]
+        CL["clients<br/>Fred · Tiingo · Bls"]
+        MOD["clients/models<br/>pydantic"]
         ENV["lib/env.py<br/>keys + base URLs"]
         MCPC["lib/mcp_client.py<br/>SSE client"]
         ANA["lib/data · models · stats<br/>trading · plots · db"]
@@ -45,7 +45,7 @@ graph TB
     NB --> ANA
 ```
 
-Notebooks reach data **through the MCP server**, not by calling navi's clients
+Notebooks reach data **through the MCP server**, not by calling the vendor clients
 directly. The notebooks are themselves MCP clients — the server gets dogfooded
 by the same interface the AI tooling uses. Notebooks do import navi's analysis
 and plotting modules directly.
@@ -60,7 +60,7 @@ and plotting modules directly.
 | --- | --- |
 | `mcp_server/server.py` | FastMCP server; all tool definitions |
 | `notebooks/fred/`, `notebooks/tiingo/`, `notebooks/bls/` | Per-source exploration + data discovery; each has a `utils.py` of MCP helpers |
-| `tests/` | Unit tests for meida **and** navi's clients (see §7) |
+| `tests/` | Unit tests for meida, including the vendor clients (see §7) |
 | *(docs)* | In the shared `sefer` repo — see [../README.md](../README.md) |
 | `requirements.in` / `.txt` | Runtime deps, pip-compiled; includes `-e ../navi` |
 | `requirements-dev.in` / `.txt` | Test-only deps (pytest, pytest-asyncio) |
@@ -71,8 +71,8 @@ and plotting modules directly.
 | Path | Role |
 | --- | --- |
 | `lib/env.py` | API keys and base URLs from `navi/.env` |
-| `lib/clients/` | Async HTTP clients: `fred.py`, `tiingo.py`, `bls.py` |
-| `lib/clients/models/` | Frozen pydantic models per provider |
+| `clients/` | Async HTTP clients: `fred.py`, `tiingo.py`, `bls.py` |
+| `clients/models/` | Frozen pydantic models per provider |
 | `lib/mcp_client.py` | SSE MCP client wrapper (`MCPClient`, `MCPClientConfig`) |
 | `lib/logger.py` | Colorized logger (`get_logger`) |
 | `lib/data/`, `lib/models/`, `lib/stats.py` | ADF, ARIMA, VAR, VECM, ECM, BM, fBM, OU |
@@ -81,7 +81,7 @@ and plotting modules directly.
 | `lib/config.py` | matplotlib/style configuration |
 
 navi is installed into meida as an **editable local package** (`-e ../navi`),
-so `import lib.clients` resolves live from the sibling checkout. `pyrightconfig.json`
+so `import clients` resolves live from the sibling checkout. `pyrightconfig.json`
 mirrors this with `extraPaths: ["../navi"]`.
 
 ---
@@ -91,7 +91,7 @@ mirrors this with `extraPaths: ["../navi"]`.
 ```mermaid
 graph LR
     A["Tool layer<br/>server.py @server.tool"] --> B["Serialization<br/>_serialize"]
-    A --> C["Client layer<br/>lib/clients"]
+    A --> C["Client layer<br/>clients"]
     C --> D["Model layer<br/>pydantic"]
     C --> E["Config layer<br/>lib/env.py"]
     C --> F["Transport<br/>httpx.AsyncClient"]
@@ -206,7 +206,7 @@ Conventions:
 ## 7. Testing strategy
 
 All tests live in **meida** (`tests/`), covering meida's server *and* navi's
-`lib/clients`. navi's analysis modules are tested elsewhere. 59 tests, ~0.1s.
+`clients`. navi's analysis modules are tested elsewhere. 59 tests, ~0.1s.
 
 | File | Covers |
 | --- | --- |
@@ -298,10 +298,10 @@ before you model.
    not model from documentation alone.
 2. **Config.** Add `get_x_api_key()` / `get_x_base_url()` to `lib/env.py` plus
    entries in `.env.example`.
-3. **Models.** `lib/clients/models/x.py` — frozen, aliased, tolerant where the
+3. **Models.** `clients/models/x.py` — frozen, aliased, tolerant where the
    provider is inconsistent.
-4. **Client.** `lib/clients/x.py` — the §5 shape, with an `XAPIError`. Export it
-   from `lib/clients/__init__.py`.
+4. **Client.** `clients/x.py` — the §5 shape, with an `XAPIError`. Export it
+   from `clients/__init__.py`.
 5. **Tools.** Add `_call_x` and `@server.tool` functions in `mcp_server/server.py`.
 6. **Tests.** `tests/test_x_client.py` + `test_x_models.py` against the captured
    fixtures; add tool tests to `test_server.py`.

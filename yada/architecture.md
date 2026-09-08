@@ -33,7 +33,7 @@ YADA is the **agent and application layer** of a multi-repo system. It does not 
 | Repo | Role | Relationship |
 | --- | --- | --- |
 | **navi** | Quantitative-finance library. Provides the `lib` package: logger, config, plots, statistical models, data-source API clients (FRED, Tiingo, BLS), and the SSE MCP client. | Installed editable via `-e ../navi` in `requirements.in`; imported throughout as `lib.*`. Must be a **sibling directory**. |
-| **meida** | MCP data server (FastMCP). Exposes FRED/Tiingo fetch tools over SSE. | Reached at `MCP_URL` (default `http://localhost:8080/sse`, see `apps/agentic/core/constants.py`). Must be running for live data fetches. |
+| **meida** | MCP data server (FastMCP). Exposes 29 tools over SSE: FRED, Tiingo, BLS, BIS and CDC Socrata fetched live, plus stored CDC WONDER/NVSR series and the catalog spanning both. | Reached at `MCP_URL` (default `http://localhost:8080/sse`, see `apps/agentic/core/constants.py`). Must be running for live data fetches. |
 | **yada** | This repo. FastAPI app, LangGraph agent tree, web UI, caches. | Depends on both of the above. |
 
 Because `lib` lives in **navi**, a change to logging, plotting, or a data client is a navi
@@ -58,7 +58,7 @@ flowchart TB
         PG[("PostgreSQL<br/>time_series_cache<br/>time_series_reports")]
         CHROMA[("ChromaDB (.db/)<br/>etf · fred · github · research_library")]
     end
-    MEIDA["meida MCP server<br/>(FRED/Tiingo over SSE)"]
+    MEIDA["meida MCP server<br/>(6 providers over SSE)"]
     LLM["LLM provider<br/>(Anthropic / OpenAI)"]
 
     UI -->|"fetch + SSE"| API

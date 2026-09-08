@@ -3,7 +3,7 @@
 Reference for the Bank for International Settlements (BIS) integration: the BIS
 **SDMX statistics API** (dataflows, structures, observations — exposed as MCP
 tools) and the export that builds the series-metadata catalog. Built and in use
-— `BisClient` + models in navi, three MCP tools in meida, and the metadata
+— `BisClient` and its models in `clients/`, three MCP tools, and the metadata
 export in `notebooks/bis/utils.py`.
 
 Unlike FRED and BLS, BIS speaks **SDMX 2.1** and needs **no credentials**. Its
@@ -253,18 +253,25 @@ FREQ,OD_TYPE,OD_RISK_CAT,OD_INSTR,ISSUE_CUR,XD_EXCHANGE,AVAILABILITY,DECIMALS,BI
 A,U,B,A,AUD,8A,K,0,USD,6,E,2025,6197,A,F,
 ```
 
-| column | meaning | client |
+| column | meaning | where it lands |
 | --- | --- | --- |
-| `TIME_PERIOD` | the period the value is for (`YYYY`, `YYYY-Qn`, `YYYY-MM`, …) | kept |
-| `OBS_VALUE` | the reported value — **before** `UNIT_MULT` scaling is applied | kept |
-| `OBS_STATUS` | quality/status of the value: `A` normal, `B` break, `E` estimated, `F` forecast, `P` provisional, plus missing-value variants (`H` holiday/weekend, `L` not collected, `M` cannot exist, `Q` suppressed) | kept |
-| `BIS_UNIT` | unit of measure (e.g. `USD`, `ARS`) — carries the unit for flows with no `UNIT_MEASURE` dimension | dropped |
-| `UNIT_MULT` | **power-of-10 scale** on `OBS_VALUE`: `0` units, `3` thousands, `6` millions, `9` billions, `12` trillions (see below) | dropped |
-| `DECIMALS` | display precision — how many decimal places to show | dropped |
-| `COLLECTION` | how the value summarizes its period: `E` end-of-period, `A` average, `B` beginning, `S` summed, `H`/`L` highest/lowest, `M` middle | dropped |
-| `AVAILABILITY` | dissemination/embargo status — who may see the value: `A` all users (free), `K` free but latest value embargoed, `B`/`C`/`D`… restricted to BIS / central banks / not for publication | dropped |
+| `TIME_PERIOD` | the period the value is for (`YYYY`, `YYYY-Qn`, `YYYY-MM`, …) | `observations[].time_period` |
+| `OBS_VALUE` | the reported value — **before** `UNIT_MULT` scaling is applied | `observations[].value` (float; a non-numeric placeholder becomes `null`) |
+| `OBS_STATUS` | quality/status of the value: `A` normal, `B` break, `E` estimated, `F` forecast, `P` provisional, plus missing-value variants (`H` holiday/weekend, `L` not collected, `M` cannot exist, `Q` suppressed) | `observations[].status` |
+| `BIS_UNIT` | unit of measure (e.g. `USD`, `ARS`) — carries the unit for flows with no `UNIT_MEASURE` dimension | `dimensions` |
+| `UNIT_MULT` | **power-of-10 scale** on `OBS_VALUE`: `0` units, `3` thousands, `6` millions, `9` billions, `12` trillions (see below) | `dimensions` |
+| `DECIMALS` | display precision — how many decimal places to show | `dimensions` |
+| `COLLECTION` | how the value summarizes its period: `E` end-of-period, `A` average, `B` beginning, `S` summed, `H`/`L` highest/lowest, `M` middle | `dimensions` |
+| `AVAILABILITY` | dissemination/embargo status — who may see the value: `A` all users (free), `K` free but latest value embargoed, `B`/`C`/`D`… restricted to BIS / central banks / not for publication | `dimensions` |
 | `OBS_CONF` | confidentiality: `F` free, `C` confidential, `N` not for publication, `D`/`S` secondary confidentiality | dropped |
 | `OBS_PRE_BREAK` | the value before a series break, where one exists | dropped |
+
+`_parse_csv` groups rows by **every** column that is not one of the five
+observation columns (`TIME_PERIOD`, `OBS_VALUE`, `OBS_STATUS`, `OBS_CONF`,
+`OBS_PRE_BREAK`), and that whole grouping key becomes the series' `dimensions`
+map. So the attributes above are *not* discarded — they ride along per series,
+next to the real key dimensions, and only `OBS_CONF` and `OBS_PRE_BREAK` are
+genuinely lost.
 
 The attribute codes come from BIS's standard SDMX codelists (`CL_OBS_STATUS`,
 `CL_CONF_STATUS`, `CL_COLLECTION`, `CL_AVAILABILITY`, `CL_UNIT_MULT`); a
@@ -278,9 +285,10 @@ representative subset is shown above.
 - `WS_CPMI_MACRO`: `UNIT_MULT=9` → **billions** of local currency.
 - `WS_XRU` (an exchange rate): `UNIT_MULT=0` → value as-is.
 
-Because `BisClient` currently **drops `UNIT_MULT` and `BIS_UNIT`**, values from the
-`bis_series_data` tool come back unscaled and unlabelled — the consumer must apply
-the scale itself. Surfacing both is tracked (see Known gaps).
+`BisClient` **never applies the scale** — `bis_series_data` returns `OBS_VALUE`
+as sent. It does carry the ingredients: `UNIT_MULT` and `BIS_UNIT` arrive in the
+series' `dimensions` map, so the consumer can do the multiplication. Nothing in
+the response *says* the value is unscaled, though, which is the trap.
 
 **No vintages / revisions.** BIS serves current values only — there is no
 as-of/real-time history (unlike FRED's ALFRED). `OBS_PRE_BREAK` gives the
@@ -288,24 +296,58 @@ pre-break value across a *series break*, the closest thing to a revision signal.
 
 ## The API integration (built)
 
-navi `BisClient` (`clients/bis.py`) wraps the three resources: SDMX-JSON for
+`BisClient` (`clients/bis.py`) wraps the three resources: SDMX-JSON for
 structure (with the version-pinned `Accept`), CSV for data (grouped into series
-by `_parse_csv`), and `BisAPIError` on HTTP errors. Config in `lib/env.py`:
-`get_bis_base_url()` — **no key accessor, by design**. Three MCP tools in
-`meida/mcp_server/server.py`:
+by `_parse_csv`), and `BisAPIError` on HTTP errors. The client and its models are
+**meida's** — they sat in `navi/lib/clients` until it was clear meida was their
+only consumer; they still import navi's `lib.env`, whose `get_bis_base_url()` is
+the whole configuration — **no key accessor, by design**. Three MCP tools in
+`mcp_server/server.py`:
 
 | Tool | Wraps | Returns |
 | --- | --- | --- |
-| `bis_dataflows` | `/dataflow` | the dataset list (ids + names) |
-| `bis_datastructure` | `/datastructure` | a flow's dimensions + codelists (`include_codes=false` by default — some codelists have 1000+ entries) |
-| `bis_series_data` | `/data` | observations for a key (codes, not labels — decode via `bis_datastructure`) |
+| `bis_dataflows` | `/dataflow` | `BisDataflowList` — the dataset list (ids + names) |
+| `bis_datastructure` | `/datastructure` | `BisDataStructureView` — a flow's dimensions + codelists (`include_codes=false` by default — some codelists have 1000+ entries) |
+| `bis_series_data` | `/data` | `BisDataResponse` — observations for a key (codes, not labels — decode via `bis_datastructure`) |
+
+### What the tools publish
+
+BIS is the exception among the sources here: its models need no translation
+layer. They are already snake_case, carry no vendor aliases, and have no HTTP
+envelope — `BisDataResponse` is `{flow, series[]}` and an observation is
+`{time_period, value, status}` — so `bis_series_data` publishes the client model
+**unchanged**. `mcp_server/responses/bis.py` therefore holds only two things:
+
+- `BisDataflowList`, an object wrapper, because a bare list produces no
+  `structuredContent` at all.
+- `BisDataStructureView`, because `bis_datastructure` genuinely returns
+  something other than its client model: it blanks each codelist's `codes`
+  unless `include_codes=true` and reports `code_count` in their place, so the
+  response has to be described honestly rather than as a `BisDataStructure`
+  whose `codes` happen to be empty.
+
+`notebooks/bis/client.ipynb` drives `BisClient` directly; `mcp.ipynb` and
+`walkthrough.ipynb` go through the server. On `bis_series_data` the two agree
+exactly, which is not true of any other source here.
 
 > **Client caveat:** `BisClient._series_key` builds a series' `key`/`title` from
-> the CSV columns heuristically, and on **multi-attribute flows** (those with a
-> `TITLE_TS`/`COLLECTION`/`UNIT_MEASURE` column) the key gets polluted and the
-> title can be `None`. The **catalog export sidesteps this** by rebuilding keys
-> and facets from the DSD dimension list (below); the `bis_series_data` MCP tool
-> still has the raw behavior. Fixing the client heuristic is tracked.
+> the CSV columns heuristically — it joins every non-observation column's value
+> in **alphabetical column order**, skipping only free text (`TITLE`,
+> `COMPILATION`, `SOURCE_REF`, `SUPP_INFO_BREAKS`, `TIME_FORMAT`) plus
+> `DECIMALS`/`UNIT_MULT`. Any other attribute column lands in the key, and even
+> the real dimensions come out alphabetically rather than in DSD order. Verified
+> live: `bis_series_data(flow="WS_CBPOL", key="M.US")` returns
+> `key = "M.US.368"` — the SDMX key `M.US` with the `UNIT_MEASURE` attribute
+> stuck on the end. Feeding the `WS_XTD_DERIV` CSV row printed above back
+> through `_parse_csv` gives `K.USD.E.A.AUD.A.B.U.8A` for a series whose real
+> key is `A.U.B.A.AUD.8A`: `AVAILABILITY`, `BIS_UNIT` and `COLLECTION` mixed in,
+> the rest re-ordered. `title` is the flow's
+> `TITLE` attribute where it has one and `None` otherwise (`WS_CBPOL` has one;
+> `WS_XTD_DERIV` does not). The **catalog export sidesteps all of this** by
+> rebuilding keys and facets from the DSD dimension list (below); the
+> `bis_series_data` tool still has the raw behavior. `dimensions` always carries
+> the truth — read the key from there, per column, rather than splitting `key`.
+> Fixing the client heuristic is tracked.
 
 ---
 
@@ -455,12 +497,13 @@ Each record + `dataflow.yaml` gives the document store everything it needs:
   data attribute (`WS_XTD_DERIV` → USD, `WS_CPMI_MACRO` → ARS), which the export
   could read from the data pull it already makes. `WS_XRU` is genuinely unitless
   (a rate). Tracked as a follow-up to the title backfill.
-- **`UNIT_MULT` scale dropped** — `BisClient` discards the power-of-10 multiplier,
-  so `bis_series_data` values come back unscaled (off by 10⁶–10⁹ on monetary
-  flows). Correctness fix; folds into the client key/title fix. See Response shapes.
-- **`BisClient` key/title heuristic** — the `bis_series_data` MCP tool can emit
-  polluted keys / null titles on multi-attribute flows (the export doesn't; it
-  builds from the DSD). Tracked.
+- **`UNIT_MULT` scale not applied** — `bis_series_data` values come back
+  unscaled (off by 10⁶–10⁹ on monetary flows). The multiplier and `BIS_UNIT` are
+  in the series' `dimensions`, so the caller *can* scale, but nothing in the
+  response says it must. Folds into the client key/title fix. See Response shapes.
+- **`BisClient` key/title heuristic** — `bis_series_data` emits attribute-polluted,
+  alphabetically-ordered keys and null titles on flows with no `TITLE` (the export
+  doesn't; it builds from the DSD). Tracked.
 - **`serieskeysonly` vs with-data counts differ** — the catalog counts series
   that actually have observations, which is fewer than the `serieskeysonly`
   key-combination estimate (e.g. `WS_EER` sized ~271 keys but 89 have data).

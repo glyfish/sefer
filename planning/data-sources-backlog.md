@@ -12,7 +12,7 @@ See [architecture.md](../meida/architecture.md) for the current client/tool patt
 ## The key architectural question
 
 The stack currently assumes one shape: **a series with observations over time**
-(navi client → pydantic models → MCP tools → ChromaDB catalog + Postgres cache).
+(meida client → pydantic models → MCP tools → ChromaDB catalog + Postgres cache).
 
 Some candidates fit that shape directly; the rest break it, and each needs a
 deliberate decision about whether it belongs in the same stores or gets its own.
@@ -268,7 +268,7 @@ also makes it a RAG candidate rather than a numeric one.
 
 > **Status: done.** Client + MCP tools + exploration notebooks (navi `ad90575`,
 > meida `b6403c2`) plus the series catalog — hand-written registry +
-> `export_cdc_catalog()`, ~2,502 atomic series across 10 datasets (meida
+> `export_cdc_catalog()`, ~2,502 atomic series across 6 curated Socrata datasets (meida
 > `c585ee1`). See the [CDC reference](../meida/api/cdc.md).
 
 **Access (verified).** Socrata API at `data.cdc.gov/resource/<id>.json` (also

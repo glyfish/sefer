@@ -2,8 +2,9 @@
 
 Reference for the U.S. Centers for Disease Control (CDC) integration: the CDC
 open-data **Socrata (SODA) API** — data, dataset metadata, and catalog discovery,
-exposed as MCP tools. Built and in use — `CdcClient` + models in navi, five MCP
-tools in meida, and two exploration notebooks (`notebooks/cdc/`).
+exposed as MCP tools. Built and in use — `CdcClient` + models in `meida/clients/`,
+**six MCP tools**, a `series_catalog` table that makes the ~2,500 Socrata series
+enumerable, and eight notebooks under `notebooks/cdc/`.
 
 CDC fills the SDT **immiseration health leg** — life expectancy, mortality, and
 *deaths of despair* (drug overdose + suicide + alcohol). Unlike BLS surveys or BIS
@@ -29,11 +30,14 @@ not enumerated.
 ## The core challenge → the design
 
 One API, **many datasets with inconsistent schemas** — each dataset has its own
-time / value / facet columns (verified: three curated datasets, three totally
-different shapes). So the client is a **thin generic Socrata fetcher**, and the
-real work is a **per-dataset field mapping** carried by the catalog export, not the
-client. A dataset is addressed by a 4×4 id (e.g. `w9j2-ggv5`). **Socrata returns
-every value as a string** — casting is the caller's job.
+time / value / facet columns, and the six curated datasets need **four different
+query shapes** between them. So the client stays a **thin generic SoQL fetcher**,
+and the real work is a **per-dataset field mapping** that sits above it in
+`mcp_server/cdc_datasets.py` — one contract, read by both the MCP tool and the
+catalog export, so the vocabulary the tool accepts and the vocabulary the catalog
+advertises cannot drift apart. A dataset is addressed by a 4×4 id (e.g.
+`w9j2-ggv5`). **Socrata returns every value as a string** — casting is the
+caller's job.
 
 ## Resources (endpoints)
 
@@ -69,10 +73,15 @@ The SDT health slice (not the whole portal). Each needs its own field mapping:
 | **w9j2-ggv5** | Death rates & life expectancy, **1900–2018** | `year × race × sex` → `{average_life_expectancy, mortality}` | (metric, race, sex) over year |
 | **9j2v-jamp** | Suicide death rates, **1950→** | NCHS "stub" schema: `indicator / unit / stub_label / age / year → estimate` | (stub_label, age) over year |
 | **xkb8-kh2a** | Provisional drug-overdose death counts | `state × month × indicator(drug) → data_value` | (state, drug) over year-month |
-| **hksd-2xuw** | Chronic Disease Indicators — **Alcohol topic**, 2019–2022 | long: `topic/questionid × location(state) × stratification × yearstart → datavalue` (typed by `datavaluetype`/`datavalueunit`) | ALC08 consumption + ALC06 binge (**exposures**); ALC09 chronic-liver mortality (**alcohol-death proxy**) |
+| **hksd-2xuw** | Chronic Disease Indicators — **Alcohol topic**, 2019–2023 | long: `topic/questionid × location(state) × stratification × yearstart → datavalue` (typed by `datavaluetype`/`datavalueunit`) | ALC08 consumption + ALC06 binge (**exposures**); ALC09 chronic-liver mortality (**alcohol-death proxy**) |
+| **w26f-tf3h** | DQS suicide death rates, **2018–2024** — the current continuation of `9j2v-jamp` | NCHS stratified: `group`/`subgroup` name the one active breakdown, `estimate_type` the rate → `estimate` | (breakdown value, rate_type) over year |
+| **489q-934x** | VSRR quarterly provisional death rates, **2023 Q1–2025 Q3** | wide: `cause_of_death × rate_type × time_period` → one rate column per cut (`rate_overall`, `rate_sex_male`, …) | (cause, sex, rate_type) over year-quarter |
 
 Facet values are precise. For `w9j2-ggv5`: races `All Races / Black / White` (only
-these — no Hispanic/Asian breakdown), sexes `Both Sexes / Female / Male`.
+these — no Hispanic/Asian breakdown), sexes `Both Sexes / Female / Male`. Callers
+never type those literals — `cdc_dataset_facets` reports the canonical tokens one
+dataset defines, and the server maps them; see
+[Fetching a series](#fetching-a-series-named-facets-not-soql).
 
 ## Deaths of despair
 
@@ -105,7 +114,8 @@ deaths, so we curate what exists and defer the exact measure:
   time series (the live version is NHTSA FARS, off-Socrata).
 - **The exact measure** — the ICD-10 *alcohol-induced causes* grouping (alcoholic
   liver disease + poisoning + cardiomyopathy + …) — is **CDC WONDER-only**, no
-  Socrata mirror. Deferred to a future WONDER source.
+  Socrata mirror. Now built: it is one of the stored WONDER series, reached
+  through `timeseries_source_data`; see [wonder-nvsr.md](wonder-nvsr.md).
 
 ## Data quirks
 
@@ -118,14 +128,18 @@ deaths, so we curate what exists and defer the exact measure:
 - **Provisional & revised.** `xkb8-kh2a` is provisional, gets revised, and uses a
   rolling **12-month-ending** window (`period`).
 - **CDC WONDER** (finer mortality-by-cause/age) is a separate, harder source
-  (XML-POST) — out of scope for this Socrata pass.
+  (XML-POST, throttled behind a bot filter) — not reachable through any tool on
+  this page; it is pulled once into the database and served from there. See
+  [wonder-nvsr.md](wonder-nvsr.md).
 - **"AH" means "Ad Hoc"**, not alcohol — the `AH Provisional … Death Counts`
   family (`qdcb-uzft` Diabetes, Cancer, Sickle Cell) has **no alcohol member**;
   don't chase it looking for an alcohol sibling.
 
 ## The integration (built)
 
-navi `CdcClient` (`clients/cdc.py`) wraps the API:
+`CdcClient` (`meida/clients/cdc.py`) wraps the API. It used to live in
+`navi/lib/clients`; meida was the only consumer, so it moved here and now only
+borrows navi's genuinely shared bits (`lib.env`, `lib.logger`):
 
 - `query(id, where=, select=, order=, group=, limit=, offset=)` → rows; `iter_all(…)`
   pages a whole dataset.
@@ -136,39 +150,183 @@ navi `CdcClient` (`clients/cdc.py`) wraps the API:
   errors. Rows are heterogeneous dicts (`CdcDataResponse`); structure via
   `CdcColumn` / `CdcDataset`; facets via `CdcCategory` / `CdcTag`.
 
-**Five MCP tools** in `meida/mcp_server/server.py`: `cdc_discover`,
-`cdc_categories`, `cdc_tags`, `cdc_dataset_columns`, `cdc_series_data`.
+**The client is the SoQL layer, and the only one.** It still speaks `$where` /
+`$select` because that is what Socrata speaks; nothing above it does.
+
+**Six MCP tools** in `meida/mcp_server/server.py`:
+
+| tool | what it does |
+| --- | --- |
+| `cdc_discover` | keyword / category search of the Socrata catalog → dataset ids |
+| `cdc_categories`, `cdc_tags` | the domain-category and tag maps, with counts |
+| `cdc_dataset_columns` | one dataset's raw columns, types and labels |
+| `cdc_series_data` | **one series, selected by named facets** — see below |
+| `cdc_dataset_facets` | the facet tokens one dataset actually defines |
+
+`cdc_discover`, `cdc_categories`, `cdc_tags` and `cdc_dataset_columns` are
+exploration tools: they speak the portal's own vocabulary (dataset ids, raw
+column names) and are how an uncurated dataset gets understood well enough to be
+curated. `cdc_series_data` and `cdc_dataset_facets` are the fetch interface, and
+they speak the catalog's vocabulary instead.
 
 **Config** in `lib/env.py`: `get_cdc_api_key()` (`CDC_API_KEY`, optional →
 `X-App-Token`) and `get_cdc_base_url()` (`CDC_BASE_URL`).
 
-**Notebooks + code** (`notebooks/cdc/`): `api.ipynb` (discover → inspect → query →
-plot), `discovery.ipynb` (browse by category/tag), `series_over_multipe_data_sets.ipynb`
-(stitch history + current across datasets — suicide 1950→2024, life expectancy
-1900→2020, the VSRR despair triad), and `catalog.py` + `catalog.ipynb` (the registry
-and series-catalog generator; see *Series catalog* below).
+**Notebooks + code** (`notebooks/cdc/`). Three of them are the shared per-source
+arc every meida source now has — `mcp.ipynb` (the tools, their schemas, and both
+delivery routes), `walkthrough.ipynb` (discovery → fetch → plot through the
+server), `client.ipynb` (the same arc against `CdcClient` and `WonderClient`
+directly, no server in between) — plus the CDC-specific ones: `api.ipynb`
+(discover → inspect → query → plot), `discovery.ipynb` (browse by category/tag),
+`series_over_multipe_data_sets.ipynb` (stitch history + current across datasets —
+suicide 1950→2024, life expectancy 1900→2020, the VSRR despair triad),
+`catalog.py` + `catalog.ipynb` (the registry walk and catalog export; see
+*Series catalog* below), and `wonder.ipynb` (see
+[wonder-nvsr.md](wonder-nvsr.md)).
 
 > The notebooks drive the **running** MCP server, which does not hot-reload — after
 > adding/changing tools, fully restart it (and watch for an orphan holding `:8080`).
 
 ---
 
+## Fetching a series: named facets, not SoQL
+
+`cdc_series_data` once took a raw `$where` string. It does not any more. It takes
+**named facets** — `state`, `race`, `sex`, `age`, `drug`, `rate_type`, `period` —
+beside `dataset_id`, `concept`, `year_start`, `year_end` and `limit`. The dataset,
+concept and facet parameters are typed as `Literal`s, so each lands in the tool's
+JSON Schema as an `enum` and a client sees the accepted vocabulary without reading
+prose. The server builds the query. **No SoQL crosses the wire.**
+
+```mermaid
+graph LR
+    C["catalog row<br/>facets + retrieval"] --> T["cdc_series_data<br/>named facets, enums"]
+    T --> Q["cdc_query.build<br/>resolve + compose"]
+    Q --> R["cdc_datasets.REGISTRY<br/>column + literal per dataset"]
+    Q --> S["$select / $where"]
+    S --> CL["CdcClient.query<br/>the SoQL layer"]
+    CL -->|HTTPS| P["data.cdc.gov"]
+```
+
+- `mcp_server/cdc_datasets.py` — the **contract**: per dataset, which column each
+  facet is and which literal each canonical token becomes.
+- `mcp_server/cdc_query.py` — the **builder**: `build()` resolves tool arguments
+  against that registry into a `$select`/`$where` pair; `vocabulary()` answers
+  what a single dataset defines. The tool's enums are derived from the registry
+  by `_union()` rather than written out, so an advertised token is always one the
+  builder can resolve.
+
+### Why the indirection is not ceremony
+
+Because the same facet is a different column in every dataset. Asking for
+`race=black`:
+
+| dataset | query shape | what the builder emits |
+| --- | --- | --- |
+| `w9j2-ggv5` | cross | `race='Black'` — a column of its own |
+| `w26f-tf3h` | stratified | a category/value pair: `group='Race and Hispanic origin' AND subgroup='Black only, non-Hispanic'` (`group` is a SoQL reserved word, so it is backticked) |
+| `hksd-2xuw` | stratified | `stratificationcategory1='Race/Ethnicity' AND stratification1='Black, non-Hispanic'` |
+| `9j2v-jamp` | NCHS stub | a scheme name plus a label composed from every active facet — and `race` alone is not a shape it publishes, so this one needs `sex` too: `race='black', sex='female'` becomes `stub_name='Sex and race' AND stub_label='Female: Black or African American'`. Asking for `race` on its own raises, naming the four combinations it does publish: none, `age+sex`, `race+sex`, `sex`. |
+
+The other facets are no better behaved. `drug` is the `indicator` column on
+`xkb8-kh2a` (`indicator='Opioids (T40.0-T40.4,T40.6)'`). `state` is `state` on
+`xkb8-kh2a` but `locationabbr` on `hksd-2xuw`. On `489q-934x` — the fourth query
+shape, a **column melt** — `sex` is not a row filter at all: it chooses which
+wide column to read (`rate_overall` / `rate_sex_male` / `rate_sex_female`), and
+the concept picks the `cause_of_death` row. And one real-world category has three
+spellings across four datasets: `white` is `White`, `White only, non-Hispanic`,
+and `White, non-Hispanic` depending on where you ask.
+
+No caller can be expected to carry that, which is exactly what made a raw-SoQL
+tool the wrong interface. Two things fall out of moving it server-side:
+
+- **Facet values are looked up, never interpolated.** `race="all' OR 1=1 --"` is
+  rejected against the vocabulary rather than executed.
+- **Errors name the way out.** The enums are the *union* across datasets, so a
+  token valid on one is routinely absent from another; a rejection lists what
+  this dataset does accept — `race='hispanic' is not valid for this dataset;
+  valid values: all, black, white`.
+
+### The two pivot modes
+
+**Cross** — the facets are independent columns, so the Cartesian product is real:
+`w9j2-ggv5` is race × sex, `xkb8-kh2a` is state × drug. Ask for both, get both.
+
+**Stratified** — the dataset publishes **one demographic breakdown at a time**.
+Every row names its own stratification (`Sex`, `Race/Ethnicity`, `Age`) and
+carries the value for that one dimension; there is no row where age and race are
+both resolved. `w26f-tf3h` and `hksd-2xuw` are shaped this way, and asking for
+two at once is not a query the server declines to write — it is **a series that
+was never published**:
+
+```text
+this dataset stratifies one dimension at a time; got age, race -- pass only one
+```
+
+`9j2v-jamp` states the same restriction as an enumeration: it publishes exactly
+four label schemes — total, `sex`, `sex`+`age`, `sex`+`race` — so `race` on its
+own, or `race`+`age`, comes back with the combinations that exist rather than an
+empty row set. `hksd-2xuw` crosses its stratification with a location
+(`locationabbr`), which is why `state` composes with a breakdown there while two
+breakdowns still do not.
+
+### `cdc_dataset_facets`, and when a concept is required
+
+The registry is keyed by `(dataset_id, concept)` because neither is unique alone.
+`cdc_series_data` therefore **requires `concept`** wherever one dataset serves
+several — and for three different reasons:
+
+- `w9j2-ggv5` — `life_expectancy` and `mortality` read **different value
+  columns** (`average_life_expectancy` vs `mortality`). A guess would return the
+  wrong number rather than an error, which is why this one is not relaxed.
+- `hksd-2xuw` — the concept *is* part of the row filter (`questionid` ALC08 /
+  ALC06 / ALC09).
+- `489q-934x` — the concept is the `cause_of_death` value.
+
+`cdc_dataset_facets` asks for one **only when it changes the answer**. Of the six
+datasets only `hksd-2xuw` genuinely differs by concept: `alcohol_consumption`
+publishes no demographic breakdown at all (state only), while `alcohol_binge` and
+`chronic_liver_mortality` publish sex, race, age and a rate type. Everywhere else
+a dataset's concepts share one vocabulary, so `cdc_dataset_facets("w9j2-ggv5")`
+answers without a concept and demanding one would be friction, not precision.
+
+### The response
+
+`cdc_series_data` returns a typed `CdcSeriesResponse`: `dataset_id`, `concept`,
+`row_count`, `rows` of `{year, value}` (strings — Socrata's, uncast), and the
+resolved `where`. That last field is **provenance — an output, never an input**;
+it is there so a result can be traced back to the predicate that produced it.
+
+Every query the builder emits selects the dataset's time column `AS year` and
+writes the range bounds against that alias, because Socrata resolves a `$select`
+alias inside `$where` — which matters, since `489q-934x` has no `year` column at
+all (its time field is `year_and_quarter`). The bounds are quoted on both sides:
+a bare number fails against a text time column, while a quoted literal against a
+numeric column is still compared numerically.
+
+---
+
 ## Series catalog (built)
 
-The **registry** (`notebooks/cdc/catalog.py`) is CDC's hand-written stand-in for
-BIS's SDMX structure — ~10 dataset specs (field maps + value-normalization + three
-special-case handlers). `export_cdc_catalog()` walks each spec and writes the
-**series catalog** to `notebooks/cdc/data/` (gitignored, regenerable; run via
-`catalog.ipynb`): a `dataset.yaml` index + one `cdc_series_<group>.yaml` per source
-group. **~2,502 atomic series** — one per facet permutation, like FRED/BIS.
+The **registry** is CDC's hand-written stand-in for BIS's SDMX structure: seven
+`Spec` entries covering four datasets, plus the two special-case specs (`StubSpec`
+for `9j2v-jamp`, `VsrrSpec` for `489q-934x`) and their value-normalization maps.
+It lives in `mcp_server/cdc_datasets.py` — with the server, because the server is
+its primary consumer — and `notebooks/cdc/catalog.py` imports from it rather than
+keeping a second copy. That import is the point: the tool's accepted vocabulary
+and the catalog's `facets` keys are the same dictionaries, so they cannot drift.
 
-Each entry carries **its exact `cdc_series_data` arguments** (`dataset_id` +
-`where` + `select`) plus descriptive metadata (`concept`, `unit`, `frequency`,
-`cadence`, `provisional`, `observation_start/end`, normalized `facets`). The agent
-therefore **replays a stored recipe** from the document store — it never authors
-SoQL nor guesses a facet value. `server.py` is unchanged: `cdc_series_data` stays
-the raw-SoQL executor (also handy for exploration); `cdc_discover` /
-`cdc_dataset_columns` / `cdc_categories` / `cdc_tags` are dev-only.
+`export_cdc_catalog()` walks each spec and writes the **series catalog** to
+`notebooks/cdc/data/` (gitignored, regenerable; run via `catalog.ipynb`): a
+`dataset.yaml` index + one `cdc_series_<group>.yaml` per source group. **2,502
+atomic Socrata series** — one per facet permutation, like FRED/BIS.
+
+Each entry carries **normalized `facets`** plus descriptive metadata (`concept`,
+`unit`, `frequency`, `cadence`, `provisional`, `observation_start/end`). The
+export also records the `where` and `select` it derived for that permutation, but
+those are now **provenance, not a call** — a note of how the entry was
+enumerated. Nothing replays them: the `series_catalog` table has no `where`
+column, and the fetch path takes the facets instead.
 
 | group | series | concepts |
 | --- | --- | --- |
@@ -180,29 +338,83 @@ the raw-SoQL executor (also handy for exploration); `cdc_discover` /
 | `w9j2-ggv5` | 18 | life_expectancy, mortality (1900–2018) |
 | `489q-934x` | 18 | suicide, drug_overdose, chronic_liver_mortality (VSRR) |
 
-**How the registry tames the mess:**
+**How the export tames the mess** (the pivot modes and the value normalization
+are the registry's, described under
+[Fetching a series](#fetching-a-series-named-facets-not-soql); these two are the
+export's own):
 
-- **Two pivot modes** — *cross* (independent columns: `w9j2` race×sex, `xkb8`
-  state×drug) and *stratified* (one active stratification per row + an optional
-  location cross: `hksd` state × {Overall|Sex|Race|Age}; `w26f` is national).
 - **Reality-driven** — a per-spec `group_by … WHERE value IS NOT NULL` enumerates
   only combos that exist, so suppressed cells, non-curated strata (`Grade`),
   overlapping age aggregates, and meta drug indicators never become entries.
-- **Value normalization** — one canonical vocabulary maps to each dataset's exact
-  literal (`white` → `White` / `White only, non-Hispanic` / `White, non-Hispanic`),
-  so the same token works across datasets.
 - **Three special-case handlers** — the suicide **stub parser** (`9j2v` splits the
-  colon-delimited `stub_label` into sex/race/age), the LE **snapshot union** (four
-  single-year datasets → one per-`(area, sex)` series with a multi-source recipe),
-  and the VSRR **column-melt** (`489q-934x` state/sex live in wide columns → the
-  value column is chosen in `select`).
+  colon-delimited `stub_label` into sex/race/age), the VSRR **column-melt**
+  (`489q-934x` sex lives in wide columns, so the value column is chosen in
+  `select`), and the LE **snapshot union** (four single-year datasets → one
+  per-`(area, sex)` series). The first two now have counterparts in `cdc_query`,
+  so those series are fetchable in one call. The snapshot union does not — it
+  needs several sub-queries — which is why its 156 entries are catalogued but
+  carry no fetch tool.
+
+### Where it is served from
+
+The exported YAML is build output that no runtime code reads. `load_catalog.py`
+upserts it into the **`series_catalog`** table (its own Alembic migration,
+`8f31c0a4e7d2`), keyed on `(source, series_id)` and pruning rows the export no
+longer produces. That table is what makes Socrata **discoverable**: before it,
+`timeseries_source_list` could enumerate the 180 stored series (171 NVSR + 9
+WONDER) and nothing could enumerate the ~2,500 live ones — you could fetch a
+Socrata series only if you already knew its facets.
+
+`SeriesCatalogClient` serves it through three tools:
+
+| tool | answers |
+| --- | --- |
+| `series_catalog_search` | which series exist — exact filters on `source`, `dataset_id`, `concept` and `active_only`, plus JSONB containment on `facets`; capped at 200 rows and returning `total` alongside `returned`, so a truncated result is visible as one |
+| `series_catalog_entry` | one entry by `series_id` |
+| `series_catalog_concepts` | the coarse map: concept × dataset with series counts |
+
+Search is exact, not fuzzy, on purpose. Descriptions are generated per *bucket*
+of series that differ only by facet value, so the 1,014 `alcohol_binge` entries
+share a handful of description strings — free-text ranking cannot separate them
+and facet filtering is the only thing that can. Semantic search over the
+descriptions is yada's document store's job; this is the exact-match index
+underneath it.
+
+### The facets round-trip
+
+The catalog's `facets` keys are the tool's argument names — the same constant in
+the same module, not two lists kept in step by hand — so a row read out of
+`series_catalog_search` feeds straight back into `cdc_series_data` with nothing
+in between:
+
+```json
+{
+  "series_id": "cdc/alcohol_binge/hksd-2xuw/state=tx/race=black/age_adjusted",
+  "facets": {"state": "TX", "race": "black", "rate_type": "age_adjusted"},
+  "retrieval": {
+    "tool": "cdc_series_data",
+    "dataset_id": "hksd-2xuw",
+    "concept": "alcohol_binge",
+    "facets": {"state": "TX", "race": "black", "rate_type": "age_adjusted"}
+  }
+}
+```
+
+The `retrieval` block is what lets **one listing span both delivery routes**. Of
+the 2,682 CDC catalog rows: **2,346** name `cdc_series_data` (live Socrata),
+**180** name `timeseries_source_data` (the stored WONDER and NVSR series — see
+[time-series-source.md](../time-series-source.md)), and **156** carry
+`"tool": null` with a note — the `le_snapshots` union, which has no single-call
+route yet. A consumer asks the catalog what exists and is told, per series, which
+door to use.
 
 ### Known gaps
 
 - **Alcohol** has no dedicated Socrata deaths dataset — curated as the ALC09
   chronic-liver proxy + ALC08/ALC06 use exposures (`hksd-2xuw`). The exact
-  alcohol-induced series now comes from **CDC WONDER** — built (`WonderClient`
-  in navi, `notebooks/cdc/wonder.ipynb`); see [wonder-nvsr.md](wonder-nvsr.md).
+  alcohol-induced series now comes from **CDC WONDER** — built (`WonderClient` in
+  `meida/clients/wonder.py`, `notebooks/cdc/wonder.ipynb`), pulled once and served
+  from the database; see [wonder-nvsr.md](wonder-nvsr.md).
 - **Life expectancy caps at 2020** nationally on Socrata (recent years are the
   state-snapshot union 2018–2021; national only via each snapshot's US row,
   2018–2020). Extension past 2020 comes from the **NVSR life-table Excel files

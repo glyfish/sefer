@@ -2,9 +2,9 @@
 
 Reference for the U.S. Bureau of Labor Statistics (BLS) integration: the Public
 Data **API** (observations, exposed as MCP tools) and the **flat-file** pipeline
-that builds the series-metadata catalog. Built and in use — `BlsClient` +
-models in navi, five MCP tools in meida, and the metadata export in
-`notebooks/bls/utils.py`.
+that builds the series-metadata catalog. Built and in use — `BlsClient` and its
+models in `clients/`, five MCP tools behind three published response models, and
+the metadata export in `notebooks/bls/utils.py`.
 
 ## Two data paths (important)
 
@@ -155,14 +155,105 @@ Notes:
 
 ## The API integration (built)
 
-navi `BlsClient` (`clients/bls.py`) wraps the API above: POST for
-multi-series, GET for surveys/popular/latest, optional key in body/query, and
-status-field error checking (raises on `REQUEST_NOT_PROCESSED` despite HTTP 200,
-with bounded retry/backoff on transient 5xx/transport errors). Five MCP tools in
-`mcp_server/server.py` expose it: `bls_series_data`, `bls_series_latest`,
-`bls_popular_series`, `bls_all_surveys`, `bls_survey_info`. Config in
-`lib/env.py`: `get_bls_api_key()` (`BLS_API_KEY`, optional) and
+`BlsClient` (`clients/bls.py`) wraps the API above: POST for multi-series, GET
+for surveys/popular/latest, optional key in body/query, and status-field error
+checking (raises whenever `status != "REQUEST_SUCCEEDED"` despite HTTP 200, with
+bounded retry/backoff on transient 5xx/transport errors and no retry on a 4xx or
+a `REQUEST_NOT_PROCESSED`, which repeating cannot fix). The client and its models
+are **meida's** — they sat in `navi/lib/clients` until it was clear meida was
+their only consumer; they still import navi's `lib.env` and `lib.logger`. Five
+MCP tools in `mcp_server/server.py` expose it: `bls_series_data`,
+`bls_series_latest`, `bls_popular_series`, `bls_all_surveys`, `bls_survey_info`.
+Config in navi's `lib/env.py`: `get_bls_api_key()` (`BLS_API_KEY`, optional) and
 `get_bls_base_url()`.
+
+### What the tools publish
+
+The models in `clients/models/bls.py` mirror the wire format — they have to, to
+parse it. They are **not** what the tools return. `mcp_server/responses/bls.py`
+holds meida's own layer, and each BLS tool declares one of its models as its
+return annotation, which is what FastMCP turns into the tool's `outputSchema`.
+
+BLS is the source with the most to strip. The envelope is HTTP-shaped, the
+observations sit three levels down, and the vendor spellings are pydantic
+aliases, which a published schema emits verbatim — so passing the parsing models
+through would make `{status, responseTime, message, Results}` and `seriesID`
+this server's contract:
+
+```mermaid
+graph LR
+    subgraph wire["wire format — clients/models/bls.py parses it"]
+        E["envelope<br/>status · responseTime · message · Results"]
+        R["Results.series<br/>seriesID · catalog · data"]
+        D["data rows<br/>year · period · periodName · value"]
+        E --> R --> D
+    end
+    subgraph pub["published — mcp_server/responses/bls.py"]
+        S["top level<br/>series · notices"]
+        SS["series<br/>series_id · catalog · observations"]
+        O["observations<br/>date · value · year · period · period_type"]
+        S --> SS --> O
+    end
+    E -. "message → notices" .-> S
+    D -. "year + period → date" .-> O
+```
+
+| Wire | Published |
+| --- | --- |
+| `Results.series[]` | `series[]` (lifted to the top level) |
+| `seriesID` | `series_id` |
+| `Series.data[]` | `Series.observations[]` |
+| `periodName` | `period_name` |
+| `latest: "true"` | `latest: true` — a real boolean, absent means `false` |
+| `allowsNetChange`, `allowsPercentChange`, `hasAnnualAverages` | `allows_net_change`, `allows_percent_change`, `has_annual_averages` — parsed from BLS's `"true"`/`"false"` strings to real booleans, `null` when unreported |
+| `message[]` | `notices[]` — **kept**, see below |
+| `status`, `responseTime` | dropped |
+
+Three decisions worth knowing:
+
+- **An ISO `date` is derived from `year` + `period`**, and both are kept beside
+  it. Every code BLS publishes maps to the **first day of the period it names**:
+  `M01`–`M12` → `YYYY-MM-01`, `Q01`–`Q04` → January/April/July/October,
+  `S01`/`S02` → January/July, `A01` → January. An unrecognised code gives
+  `date: null` and `period_type: "unknown"` — never a guessed date, and never a
+  dropped row. The annual-average codes (`M13`, `Q05`, `S03`) deliberately share
+  a date with the first period of their year, so a series fetched with
+  `annualaverage=true` holds two rows dated `YYYY-01-01`; **`period_type` is
+  what tells them apart**, and what to filter on to keep aggregates out of a
+  monthly or quarterly series.
+- **`message[]` survives as `notices[]`.** It looks like transport and is not:
+  on a `REQUEST_SUCCEEDED` response it is the *only* signal that a result was
+  truncated ("Year range has been reduced to the system-allowed limit of 20
+  years") or partly unfulfilled (a series id that does not exist). Dropping it
+  would make the tools silently lossy, so it is published as data.
+- **The optional nested payloads are carried through, not flattened away** —
+  `catalog`, `calculations`, annual-average rows and `aspects`. The catalog's
+  key set varies per survey (a CPI series is described by item and area, a CPS
+  series by demographics), so the keys common to every survey are declared and
+  the survey-specific remainder is kept verbatim in `catalog.additional_fields`.
+  The empty `{}` objects BLS pads `footnotes` with are dropped.
+
+| Tool | Model | Top-level fields |
+| --- | --- | --- |
+| `bls_series_data`, `bls_series_latest`, `bls_popular_series` | `BlsSeriesData` | `series`, `notices` |
+| `bls_all_surveys` | `BlsSurveyList` | `surveys`, `notices` |
+| `bls_survey_info` | `BlsSurveyInfo` | `survey`, `notices` |
+
+`bls_survey_info` has its own model rather than reusing the list: BLS returns
+both through the same envelope, but a lookup by abbreviation answers with one
+survey (unwrapped from the one-element list, `null` when nothing matched) and is
+the only call that populates the capability flags. `bls_popular_series` shares
+`BlsSeriesData` with the data tools but returns series ids and no observations —
+it is a discovery list.
+
+Mappers (`from_bls_series_response`, `from_bls_surveys_response`,
+`from_bls_survey_response`) are pure and total: no I/O, and a `None` or empty
+payload maps to an empty model rather than raising at the tool boundary. Tests:
+`tests/test_responses_bls.py`.
+
+Both shapes are visible side by side in the notebooks: `notebooks/bls/client.ipynb`
+drives `BlsClient` directly (the parsing models), while `mcp.ipynb` and
+`walkthrough.ipynb` go through the server (the published models).
 
 ---
 

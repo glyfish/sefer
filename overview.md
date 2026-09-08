@@ -8,7 +8,7 @@ alongside it (see [README](README.md)).
 
 | Repo | Role |
 | --- | --- |
-| **navi** | Shared library (the importable package is named `lib`; consumers install it via `-e ../navi`). Owns the data **clients** and the **model code** — reusable algorithm implementations (indicators, strategies, estimators, stats) plus plot/db utils. |
+| **navi** | Shared library (the importable package is named `lib`; consumers install it via `-e ../navi`). Owns the **model code** — reusable algorithm implementations (indicators, strategies, estimators, stats) plus plot/db utils. |
 | **meida** | Data-access **API** — an MCP server exposing its own vendor clients as tools and building the metadata catalogs (FRED, Tiingo, BLS, BIS). Owns navi's `clients`. |
 | **alef** | Model **development & testing** — where algorithms are prototyped and validated, **on simulated data first**, against navi's model primitives. Owns navi's `lib/data`, `lib/models`, `lib/plots` and `lib/trading`, and holds their tests. |
 | **yada** | The **analysis pipeline** — applies the models to *real* data, plus the data stores (Postgres, vector), plotting, reporting, and the agentic frontend. |
@@ -18,7 +18,7 @@ alongside it (see [README](README.md)).
 ## How work flows
 
 ```text
-        raw data  (meida / navi clients)
+        raw data  (meida clients)
                         │
     simulated data ─▶  alef   develop & test the algorithm
                         │  matures into

@@ -46,7 +46,15 @@ who owns what.
   Developing against synthetic data guards against overfitting to the real series.
 - **Regenerable catalogs are gitignored** — the metadata catalogs meida exports
   (e.g. `notebooks/*/data/`) are large, regenerable, and **not committed**; they
-  are reproduced from code and persisted via system backups.
+  are reproduced from code and persisted via system backups. The exception is
+  a source whose provider **revises published data in place**: there, the small
+  normalized `.jsonl` is committed so a re-pull shows up as a reviewable diff
+  instead of silently changing the numbers. CDC is the case today — re-running
+  its WONDER pull moves a handful of years by a death or two.
+- **A slow or throttled download gets a notebook, not a script** — see
+  [meida/architecture.md §9](meida/architecture.md). The saved cell output is
+  the record that an expensive pull succeeded, and a notebook makes re-running
+  one a deliberate act.
 - **`_int` date mirrors** — vector stores can't range-compare date strings, so
   series records carry integer date mirrors (`YYYYMMDD`) beside the ISO dates for
   recency/coverage filters.

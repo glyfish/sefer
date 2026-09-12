@@ -451,13 +451,49 @@ configuration at all: its endpoint is hard-coded and it takes no credential.
 
 ## 9. Notebooks, discovery, and generated data
 
-Each source has the **same trio** of notebooks, plus a `utils.py` of helpers:
+Each source has the **same trio** of notebooks, plus a `utils.py` of helpers,
+and a fourth for sources that are downloaded rather than queried:
 
 | Notebook | What it does |
 | --- | --- |
 | `mcp.ipynb` | Exploration through the server — what tools exist, their schemas, example calls |
 | `walkthrough.ipynb` | The narrative arc: discovery → fetch → plot, entirely over MCP |
 | `client.ipynb` | The *same* arc against the vendor client, with no server in the middle |
+| `downloads.ipynb` | **File-delivered sources only** — how the raw files are fetched |
+
+### `downloads.ipynb` — the pattern for file-delivered sources
+
+A source with no live API has to be pulled in bulk and parsed from disk, and
+those pulls are slow, rate-limited, or both: CDC's is ~15 minutes of FTP for
+936 workbooks plus ~40 minutes of WONDER at one query per two minutes. That
+changes what the code around it has to do.
+
+**A notebook rather than a script**, for two reasons. The saved cell output is
+the record that an expensive pull succeeded and what it produced — `153
+wanted, 0 downloaded, 153 on disk` is worth more than the absence of an error.
+And a notebook makes re-running deliberate; a script is one stray `python
+fetch.py` away from re-pulling against a host that blocks aggressive access.
+The download functions themselves live in a plain `fetch.py` beside it, so
+they are importable and testable; the notebook only drives them.
+
+Four properties every such fetcher needs, all learned by getting them wrong:
+
+- **Idempotent.** Anything already on disk is skipped, so an interrupted pull
+  resumes instead of restarting. Both of CDC's pulls stalled part-way.
+- **Paced for a rate-based filter.** `ftp.cdc.gov` does not reject the first
+  fast request — it serves ~400 files and then times out every read after
+  that. `curl_cffi` with a browser fingerprint plus a 1s pause, and a test
+  asserting nobody lowers it.
+- **Records what it could not get.** WONDER rejects codes that are part of the
+  published definitions; the fetcher drops what the error names, retries, and
+  writes `dropped_codes` into a summary the builders read. Without it the
+  series quietly misrepresent their own definition.
+- **Verified before the data is trusted.** A truncated workbook still parses —
+  it returns a wrong number. `verify_national` / `verify_state` run over
+  everything on disk and raise rather than emitting quietly-wrong series.
+
+Sources using it today: **CDC** (NVSR life tables, WONDER cause-of-death
+rates). Sources fetched live from an API do not need one.
 
 `client.ipynb` earns its place by being redundant: running both is how you see
 what the server translates. Tiingo's wire format is camelCase and its client
@@ -469,16 +505,18 @@ Anything else in a source's directory is a **discovery pipeline** — the
 notebooks and modules that pull catalog metadata down to local YAML. FRED walks
 its category tree in `categories/` and `series/`, BLS has `surveys.ipynb`, and
 CDC carries the largest set (`catalog.py`, `discovery.ipynb`, `wonder.ipynb`,
-the builders, and the two loaders). Those outputs are **git-ignored and
-regenerable**, and the sizes are why — the four catalogs come to roughly 380 MB
-on disk, none of it in the repo.
+`downloads.ipynb`, and the builders; the loaders are shared, in `db_import/`).
+Those outputs are **git-ignored and regenerable**, and the sizes are why — the
+four catalogs come to roughly 380 MB on disk, none of it in the repo. The one
+exception is the normalized `.jsonl`, committed because NCHS revises published
+data in place — see [conventions](../conventions.md).
 
 | Source | Discovery model | Output (ignored) | Size |
 | --- | --- | --- | --- |
 | FRED | Category tree walk from the top-level categories → leaf categories → series per leaf | `notebooks/fred/{categories/category_data,series/series_data}/` | 206 MB |
 | BLS | Flat-file catalog from `download.bls.gov` → survey + series metadata | `notebooks/bls/data/` (catalog), `notebook_downloads/` (raw files) | 148 MB, 288,085 series |
 | BIS | SDMX structure resources + one bulk pull per dataflow for coverage dates | `notebooks/bis/data/` | 18 MB, 26,902 series across 22 dataflows |
-| CDC | Hand-written registry of curated datasets → facet cross-product per dataset | `notebooks/cdc/data/` | 8.4 MB, 2,502 catalog entries |
+| CDC | Hand-written registry of curated datasets → facet cross-product per dataset, plus the NVSR/WONDER downloads (§9) | `notebooks/cdc/data/` | 25 MB, 2,526 catalog entries |
 
 For **BLS** the catalog is built from the **flat files**, not the API — the API
 can only enumerate ~25 popular series per survey and lacks coverage dates. The

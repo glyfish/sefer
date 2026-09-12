@@ -52,10 +52,10 @@ a migration.
 | `catalog_id` | uuid PK | `gen_random_uuid()`. |
 | `source` | text | Catalog namespace — `cdc` today. |
 | `series_id` | text | e.g. `cdc/alcohol_binge/hksd-2xuw/state=ak/race=aian/age_adjusted`. |
-| `dataset_id` | text, null | Provider dataset. Null for the stored series and the `le_snapshots` union. |
+| `dataset_id` | text, null | Provider dataset. Null for the stored (WONDER/NVSR) series. |
 | `concept` | text, null | What is measured — `alcohol_binge`, `suicide`, `life_expectancy`. |
-| `title` | text | Formulaic, and **the discriminating field**: 2,676 distinct across 2,682 rows. |
-| `description` | text, null | LLM-generated **per bucket** — 38 distinct strings across 2,682 rows. |
+| `title` | text | Formulaic, and **the discriminating field**: near-unique across 2,526 rows. |
+| `description` | text, null | LLM-generated **per bucket** — 37 distinct strings across 2,526 rows. |
 | `units` | text, null | |
 | `frequency` | text, null | |
 | `provisional` | boolean | Revised in later releases (VSRR counts). 442 rows. |
@@ -93,20 +93,19 @@ tool that fetches it:
 
 ```mermaid
 graph LR
-    Q["series_catalog_search"] --> C[("series_catalog<br/>2,682 entries")]
+    Q["series_catalog_search"] --> C[("series_catalog<br/>2,526 entries")]
     C --> R{"entry.retrieval<br/>.tool"}
     R -->|"cdc_series_data<br/>2,346"| S["Socrata API<br/>(live fetch)"]
     R -->|"timeseries_source_data<br/>180"| T[("time_series_source<br/>(stored)")]
-    R -->|"null · 156"| N["le_snapshots<br/>no single-call route"]
 ```
 
-The three outcomes, all verified against the live table:
+Both outcomes, verified against the live table:
 
 | `retrieval.tool` | Rows | What it is |
 | --- | --- | --- |
 | `cdc_series_data` | 2,346 | Live Socrata fetch. |
 | `timeseries_source_data` | 180 | The stored series — 171 NVSR, 9 WONDER. |
-| `null` | 156 | The `le_snapshots` group: state life expectancy assembled from four single-year datasets, so it needs several sub-queries unioned and has no single-call route yet. |
+| `null` | 0 | Nothing today. Kept nullable as a guard, with a test behind it. |
 
 That last row is why `retrieval.tool` is nullable rather than assumed present. A
 null is an honest answer — *this series exists, and there is no one call that
@@ -240,9 +239,8 @@ database, not by reading the loader or the YAML.
 
 | Cut | Count |
 | --- | --- |
-| Total entries | 2,682 |
+| Total entries | 2,526 |
 | Socrata (`cdc_series_data` route) | 2,346 |
-| Socrata with no single-call route (`le_snapshots`) | 156 |
 | Stored (`timeseries_source_data` route) | 180 |
 | Distinct datasets | 6, plus null |
 | Distinct concepts | 13 |

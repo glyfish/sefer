@@ -291,18 +291,18 @@ also makes it a RAG candidate rather than a numeric one.
 > Notebooks per source: `discovery`, `walkthrough`, `mcp`, `client`, `api`,
 > `catalog`, `wonder`.
 >
-> **Open items**, none blocking:
-> - **156 `le_snapshots` series are discoverable but unfetchable** —
->   catalogued with `tool: null` because they need four datasets unioned and
->   no single call does that. Worse than either being absent or working.
-> - **Three facet keys for one concept**: `state` (2,393, postal codes),
->   `geography` (180, postal codes, on the stored series), `area` (156, full
->   state names, on `le_snapshots`). So `state=AK` returns 42 and misses the
->   rest. Fold them into `state` on postal codes.
-> - **`notebooks/cdc/data/` is gitignored as regenerable and NVSR is not** —
->   936 workbooks hand-pulled from a bot-filtered FTP host with no
->   programmatic year→volume mapping. Committing the normalized `.jsonl` is
->   the cheap insurance.
+> **No open items.** Three were logged and all three are closed:
+> - The 156 `le_snapshots` series were discoverable but unfetchable
+>   (`tool: null` — they needed four datasets unioned). Those Socrata
+>   datasets turned out to be the NVSR state life tables rounded to one
+>   decimal, which the stored series already carry with an extra year, so the
+>   group was **deleted** rather than given a union tool. Catalog 2,682 →
+>   2,526, and every entry now has a route.
+> - Three facet keys covered one concept across two vocabularies, so
+>   `state=AK` returned 42 of 45 silently. Normalised: `state` holds a postal
+>   code everywhere, `geography` means only `national`.
+> - The normalized `.jsonl` is no longer gitignored — 224K standing behind 936
+>   workbooks hand-pulled from a bot-filtered FTP host.
 
 **Access (verified).** Socrata API at `data.cdc.gov/resource/<id>.json` (also
 CSV). **No token required** for reads (an app token raises rate limits). Rows

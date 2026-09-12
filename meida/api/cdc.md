@@ -379,7 +379,6 @@ column, and the fetch path takes the facets instead.
 | --- | --- | --- |
 | `hksd-2xuw` | 1,816 | alcohol_consumption, alcohol_binge, chronic_liver_mortality |
 | `xkb8-kh2a` | 424 | drug_overdose |
-| `le_snapshots` | 156 | life_expectancy (state, 2018–2021, union) |
 | `9j2v-jamp` | 42 | suicide (history 1950–2018) |
 | `w26f-tf3h` | 28 | suicide (current 2018–2024) |
 | `w9j2-ggv5` | 18 | life_expectancy, mortality (1900–2018) |
@@ -448,12 +447,17 @@ in between:
 ```
 
 The `retrieval` block is what lets **one listing span both delivery routes**. Of
-the 2,682 CDC catalog rows: **2,346** name `cdc_series_data` (live Socrata),
+the 2,526 CDC catalog rows: **2,346** name `cdc_series_data` (live Socrata) and
 **180** name `timeseries_source_data` (the stored WONDER and NVSR series — see
-[time-series-source.md](../time-series-source.md)), and **156** carry
-`"tool": null` with a note — the `le_snapshots` union, which has no single-call
-route yet. A consumer asks the catalog what exists and is told, per series, which
-door to use.
+[time-series-source.md](../time-series-source.md)). A consumer asks the catalog
+what exists and is told, per series, which door to use.
+
+`tool` stays nullable, but nothing is null today. It held the `le_snapshots`
+group — 156 state life-expectancy series assembled from four single-year
+datasets, so no single call could fetch them — until those datasets turned out
+to be the NVSR state life tables rounded to one decimal, which the stored
+series already carry with an extra year. The group was deleted rather than
+given a union tool, and a test now asserts nothing reaches the null branch.
 
 ### Known gaps
 

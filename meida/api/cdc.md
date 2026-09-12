@@ -270,6 +270,53 @@ empty row set. `hksd-2xuw` crosses its stratification with a location
 (`locationabbr`), which is why `state` composes with a breakdown there while two
 breakdowns still do not.
 
+### When the period spans two columns
+
+The facet mapping above is the variation everyone expects. The **time** column
+varies too, and less visibly.
+
+Five of the six datasets have one column that identifies an observation:
+`year` on `w9j2-ggv5`, `yearstart` on `hksd-2xuw`, `time_period` on
+`w26f-tf3h`, `year_and_quarter` on `489q-934x`. `xkb8-kh2a` does not. It
+publishes **monthly** and keys each row by `year` *and* `month`, so a select
+naming only the time column returns twelve rows a year all carrying the same
+label — twelve points claiming one period, in whatever order the API returned
+them. That is what it did until September 2026; the spec had said
+`frequency="monthly"` the whole time, and nothing compared the two halves.
+
+Socrata cannot fold the columns for us. There is no `concat()`, and `||`
+returns an empty result rather than an error — a silent wrong answer, which is
+worse than a rejection. So `Spec.month_field` marks a dataset whose period is
+split, `_select` emits both columns, and `cdc_query.compose_period` builds
+`2020-01` after the fetch:
+
+```text
+select year, month, data_value AS value      # not `year AS year, ...`
+                    ↓
+{'year': '2020-01', 'value': '492'}
+```
+
+**Ordering moves client-side with it.** `$order=year` leaves the months
+arbitrary, and adding `month` sorts them *alphabetically* — April, August,
+December. `compose_period` sorts on the composed label instead, which is why
+`build()` returns `order: None` for a split-period dataset.
+
+The catalog's coverage bounds needed the same treatment: `_span` took
+`min/max(year)` and reported `2015..2026` where the data runs
+`2015-01..2026-03`. For a split-period dataset it now enumerates the distinct
+pairs — a few hundred rows — and composes the bounds.
+
+`tests/test_server.py` asserts that no spec claims a sub-annual frequency while
+selecting only a bare year column, so the next dataset with this shape fails at
+test time rather than in a plot.
+
+**One thing the fix does not address.** Every `xkb8-kh2a` value is a
+*12-month-ending* count: December 2020 is the twelve months **ending** in
+December, not December's deaths. Consecutive points overlap by eleven months,
+so differencing them gives `deaths(m) − deaths(m−12)` rather than a monthly
+figure, and the December point alone equals the calendar year. `frequency:
+monthly` describes when the number is published, not what it measures.
+
 ### `cdc_dataset_facets`, and when a concept is required
 
 The registry is keyed by `(dataset_id, concept)` because neither is unique alone.

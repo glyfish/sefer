@@ -266,10 +266,43 @@ also makes it a RAG candidate rather than a numeric one.
 
 ## 7. CDC — public health statistics
 
-> **Status: done.** Client + MCP tools + exploration notebooks (navi `ad90575`,
-> meida `b6403c2`) plus the series catalog — hand-written registry +
-> `export_cdc_catalog()`, ~2,502 atomic series across 6 curated Socrata datasets (meida
-> `c585ee1`). See the [CDC reference](../meida/api/cdc.md).
+> **Status: done — all three delivery routes.** What began as the Socrata leg
+> now covers Socrata, WONDER and NVSR behind one catalog. See the
+> [CDC reference](../meida/api/cdc.md) and
+> [WONDER/NVSR](../meida/api/wonder-nvsr.md).
+>
+> | | series | coverage | how it is fetched |
+> | --- | --- | --- | --- |
+> | Socrata | 2,346 | varies, to 2018–2024 | live, `cdc_series_data` |
+> | WONDER | 9 | 1999–2024 | stored; the API is throttled to 1 query/2 min |
+> | NVSR national | 18 | 2018–2024 | stored; xlsx pulled from FTP by hand |
+> | NVSR state | 153 | 2018–2022 | stored; 51 jurisdictions × 3 sexes |
+>
+> Two tables carry it. **`series_catalog`** (2,682 rows, every one with an
+> LLM-written description) is discovery — what exists, which facets pick it
+> out, and a `retrieval` block naming the tool that fetches it. That block is
+> what lets one listing serve both routes. **`time_series_source`** (180
+> series, 1,119 observations) holds observations only for the file-delivered
+> sources, and stands in for the API endpoint they do not have; its TTL means
+> "due for a refresh", not "too old to serve". Socrata is deliberately absent
+> from it — it has a working API, so storing it would be a cache that goes
+> stale for nothing.
+>
+> Notebooks per source: `discovery`, `walkthrough`, `mcp`, `client`, `api`,
+> `catalog`, `wonder`.
+>
+> **Open items**, none blocking:
+> - **156 `le_snapshots` series are discoverable but unfetchable** —
+>   catalogued with `tool: null` because they need four datasets unioned and
+>   no single call does that. Worse than either being absent or working.
+> - **Three facet keys for one concept**: `state` (2,393, postal codes),
+>   `geography` (180, postal codes, on the stored series), `area` (156, full
+>   state names, on `le_snapshots`). So `state=AK` returns 42 and misses the
+>   rest. Fold them into `state` on postal codes.
+> - **`notebooks/cdc/data/` is gitignored as regenerable and NVSR is not** —
+>   936 workbooks hand-pulled from a bot-filtered FTP host with no
+>   programmatic year→volume mapping. Committing the normalized `.jsonl` is
+>   the cheap insurance.
 
 **Access (verified).** Socrata API at `data.cdc.gov/resource/<id>.json` (also
 CSV). **No token required** for reads (an app token raises rate limits). Rows
@@ -420,8 +453,10 @@ the sequence below is the working roadmap.
 
 ### Build sequence
 
-1. **CDC** — health leg (deaths of despair, life expectancy). Socrata, no token.
-   *(easy)* — **✅ done** (§7).
+1. **CDC** — health leg (deaths of despair, life expectancy). *(easy)* —
+   **✅ done** (§7), and larger than scoped: Socrata turned out to be one of
+   three routes, with WONDER and NVSR needing a stored-series table because
+   neither has an API to call. **Voteview is now the front of the queue.**
 2. **Voteview** — cheap half of elite cohesion (DW-NOMINATE overlap, bipartisan
    fraction). CSV, no auth, + a reduction pass. *(easy)*
 3. **Clio-Infra** — historical backbone (real wages, inequality, life expectancy,

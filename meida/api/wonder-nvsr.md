@@ -187,11 +187,27 @@ State editions: 2018 `70-01`, 2019 `70-18`, 2020 `71-02`, 2021 `73-07`,
 2022 `74-12`. Unmapped dirs to inspect before assuming: `54_13`, `56_10`,
 `57_14`, `62_09`, `64_06`, `65_09`, `68_12`, `75-1`.
 
+Per-state workbooks use the **same layout as the national ones** — e0 at G4 —
+so one parser reads both. Each jurisdiction ships four files: `{ST}1/2/3` are
+the total/male/female life tables and **`{ST}4` is standard errors**, whose G4
+holds an SE of e0 (0.02–0.25), not a life expectancy — 51 jurisdictions yield
+**153** series per year, not 204. The 2018 volume (`70-01`) is the odd one out:
+it names files `Alabama-1-Total.xlsx` rather than `AL1.xlsx`, so a fetcher must
+map full state names to postal codes for that year alone.
+
+Verified across 2018–2022 (612 workbooks): `female > both > male` everywhere,
+every e0 in 60–95, and the national value inside the state range — the checks
+`nvsr_series.verify_state` runs, since there is no state equivalent of the
+published-value table `verify_national` uses.
+
 Ingest notes: the CDC life-expectancy page's FTP link list **stops at 2022** —
 enumerate the FTP directory, don't trust the page; the products page mislabels
 75-05 as "State" (the PDF's own title is *United States Life Tables, 2024*);
 `ftp.cdc.gov` sits behind the same bot filter — `curl_cffi` + gentle pacing
-(aggressive pulls trip a multi-day block).
+(aggressive pulls trip a multi-day block). The filter is **rate-based, not
+per-request**: a plain `urllib` pull at ~3 files/s served 400 workbooks and then
+stalled every subsequent read to a timeout, while `curl_cffi` fetched the very
+file it was stuck on immediately. Budget ~1s between files.
 
 ## Microdata files — the bulk channel
 
@@ -242,8 +258,6 @@ suicide; X65 in both alcohol-induced and suicide).
   (`Y87.0`/`Y87.1`) unverified — needed by the suicide/homicide/firearm sets;
   fallback is dropping them (<10 deaths/yr) and documenting the deviation.
 - **D176 skeleton** uncaptured — blocks provisional-year cause series (2025+).
-- **Per-state xlsx schema** (the 4 files per jurisdiction in `74-12/`) not yet
-  examined — one download settles it.
 - **Data-year → FTP-directory discovery** is manual: nothing programmatic links
   next year's volume-number; enumerate the FTP dir annually (fits the
   manual-download roadmap).

@@ -196,7 +196,7 @@ the server.
 
 ## Loading
 
-`notebooks/cdc/load_catalog.py` reads every `data/cdc_series_*.yaml` and upserts
+`data/load_catalog.py` reads every `<source>_series_*.yaml` and upserts
 on `(source, series_id)`, leaving `catalog_id` and `created_at` alone so a
 re-export does not break references or reset provenance. Socrata entries get
 their `retrieval` block derived here — from the dataset and facets a

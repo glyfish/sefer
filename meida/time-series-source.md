@@ -254,7 +254,7 @@ unchanged.
 
 ## Loading
 
-`notebooks/cdc/load_timeseries.py` upserts normalized `.jsonl` from
+`data/load_timeseries.py` upserts normalized `.jsonl` from
 `notebooks/cdc/data/timeseries/` — built by `wonder_series.py` and
 `nvsr_series.py` — on the `(source, native_id, frequency)` conflict target.
 `source_id` and `created_at` are deliberately left untouched: a refresh updates a

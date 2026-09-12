@@ -34,7 +34,7 @@ graph TB
         DBR["timeseries_source.py<br/>series_catalog.py"]
         CL["clients/<br/>Fred · Tiingo · Bls · Bis · Cdc"]
         WC["clients/wonder.py<br/>offline pulls only"]
-        LOAD["notebooks/cdc/load_*.py<br/>catalog + series loaders"]
+        LOAD["data/load_*.py<br/>catalog + series loaders<br/>(source-parameterised)"]
     end
 
     subgraph navi["navi (sibling repo)"]

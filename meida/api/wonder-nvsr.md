@@ -249,14 +249,52 @@ standard groupings for suicide (*U03, X60–X84, Y87.0) and chronic liver diseas
 never a sum of series** — the sets overlap (X60–X64 is in both drug-induced and
 suicide; X65 in both alcohol-induced and suicide).
 
+## Reproducing the pulls
+
+Both sources are rebuildable from `notebooks/cdc/downloads.ipynb`; the
+functions live in `notebooks/cdc/fetch.py`. A notebook rather than a script
+because the saved output is the record that a slow, throttled pull succeeded,
+and because re-running one should be deliberate.
+
+**NVSR** is ~15 minutes for 936 workbooks, idempotent (anything on disk is
+skipped). Verified by deleting files across both naming schemes and getting
+byte-identical copies back.
+
+**WONDER** is ~40 minutes for 9 concepts × 2 vintages at one query per two
+minutes. Its ICD-10 code sets had been lost — the first pull ran from a script
+that no longer exists, and the cached JSON holds results, not queries.
+`wonder_codes.py` reconstructs them from the published definitions and the
+code *counts* the old summary recorded, and each was then checked against the
+original pull by comparing **deaths** year by year (a rate moves when NCHS
+revises population estimates; a death count for a fixed code set does not):
+
+| result | concepts |
+| --- | --- |
+| reproduce the original pull exactly, 22 years | alcohol_induced, cardiometabolic, chronic_liver, drug_overdose, suicide, homicide, firearm |
+| differ by ±1–2 deaths in 8 of 22 years | drug_induced, despair_composite |
+
+Those last two are **not** a code-set error. The differences run in both
+directions and net to −2 across 22 years, which no code can do — codes only
+add or remove deaths consistently. It is NCHS revising death certificates
+after publication, and despair_composite differs in exactly the same years by
+exactly the same amounts because it contains drug_induced.
+
+That is also why `notebooks/cdc/data/timeseries/*.jsonl` is committed while
+the raw pulls are gitignored: a re-pull surfaces an upstream revision as a
+reviewable diff instead of silently changing the numbers.
+
 ## Known gaps / open items
 
 - **113-recode group-by**: variable id unharvested; one throttled live query
   settles both the id and the `B_` ordering (the drug/alcohol recode as a second
   by-variable 500s — the reason `WonderClient` uses the codeset finder).
-- **Finder acceptance** of asterisk codes (`*U01`–`*U03`) and sequelae codes
-  (`Y87.0`/`Y87.1`) unverified — needed by the suicide/homicide/firearm sets;
-  fallback is dropping them (<10 deaths/yr) and documenting the deviation.
+- ~~Finder acceptance of asterisk codes~~ — **settled: WONDER rejects every
+  one.** `*U01`, `*U02`, `*U03` and `*U01.4` all return HTTP 500 naming the
+  offending codes; the sequelae codes `Y87.0`/`Y87.1` are accepted. The
+  fallback is what the pulls do — drop what the error names, retry, and record
+  it in `dropped_codes`, which `wonder_series` carries into each series'
+  metadata. Suicide, homicide, firearm and the despair composite therefore
+  omit terrorism-reclassified deaths.
 - **D176 skeleton** uncaptured — blocks provisional-year cause series (2025+).
 - **Data-year → FTP-directory discovery** is manual: nothing programmatic links
   next year's volume-number; enumerate the FTP dir annually (fits the

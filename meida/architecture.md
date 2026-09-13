@@ -536,7 +536,7 @@ is gitignored.
 | FRED | `series/series_info.ipynb` → `export_finance_category_series` | FRED API via MCP | `series/series_data/*.yaml` (14, 206 MB) | catalog |
 | BLS | `surveys.ipynb` cell 6 → `fetch_bls_source_files` | `download.bls.gov` | **`/tmp/bls_source/`** — outside the repo | raw |
 | BLS | `surveys.ipynb` cell 6 → `write_survey_yaml`, `write_all_series_yaml` | the flat files above | `notebooks/bls/data/*.yaml` (24, 148 MB) | catalog |
-| BLS | `surveys.ipynb` cell 9 → `fetch_series` | BLS API via MCP | `notebook_downloads/bls_headline.yaml` | **observations** |
+| BLS | `surveys.ipynb` cell 9 → `fetch_series` | BLS API via MCP | `notebook_downloads/bls_headline.yaml` | observations — *demo only, see below* |
 | BIS | `export_bis_catalog()` — **REPL-only, no notebook calls it** | BIS SDMX | `notebooks/bis/data/*` (23, 18 MB) | catalog |
 | CDC | `downloads.ipynb` → `utils/fetch.py` | `ftp.cdc.gov`, WONDER API | `data/nvsr/**/*.xlsx`, `data/wonder/*.json` | **observations** |
 | CDC | `catalog.ipynb` → `utils/catalog.py` | Socrata | `data/cdc_series_*.yaml`, `data/dataset.yaml` | catalog |
@@ -547,9 +547,13 @@ is gitignored.
 
 Three things this corrects, all of which were believed otherwise:
 
-**BLS downloads observations too**, not just a catalog — `surveys.ipynb` cell 9
-writes `bls_headline.yaml`. So three sources land observations on disk: CDC,
-Voteview and BLS.
+**BLS writes observations to disk, but not as a data product.**
+`surveys.ipynb` cell 9 fetches three headline series — unemployment rate, CPI-U,
+total nonfarm payrolls — into `bls_headline.yaml` to demonstrate the fetch path.
+It is API-backed, has no consumer anywhere in the repo, and re-runs in seconds.
+That is categorically different from CDC and Voteview, where the file on disk
+*is* the source because no API serves those values. Two sources depend on
+downloaded observations; BLS's is a cache of a demo.
 
 **BLS's raw flat files land in `/tmp/bls_source`**, not the repo. `/tmp` does
 not survive a reboot, so "regenerable" for BLS means redoing the ~75-minute

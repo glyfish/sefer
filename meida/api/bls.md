@@ -404,8 +404,14 @@ and writes dated observation rows — `date`, `value`, `period`, plus
 `calculations.net_changes` — to `notebooks/bls/notebook_downloads/`. That is a
 different tree from the catalog in `data/`, and a different kind of content.
 
-BLS is therefore one of three sources that land observations on disk, alongside
-CDC and Voteview — not a catalog-only source.
+This is a **demonstration, not a data product**. The three series are the
+canonical headline indicators, nothing in the repo reads the file, and the
+whole cell re-runs in seconds against the API. Unlike CDC's workbooks or
+Voteview's CSVs — where the file on disk is the only copy, because no API
+serves those values — `bls_headline.yaml` is a cache you can delete.
+
+The distinction worth keeping: BLS's **catalog** must be downloaded, because
+the API cannot enumerate series. Its **observations** never have to be.
 
 ### Regeneration
 

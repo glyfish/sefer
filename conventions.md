@@ -31,6 +31,12 @@ who owns what.
   `navi-3.14.7` env is deliberately minimal so an undeclared import fails there
   rather than in whoever installs navi next — `navi/scripts/check_imports.py`
   checks it, and nothing else should be installed into it.
+- **`lib.plots.curve` takes `(y, x)`, matplotlib takes `(x, y)`** — the helpers
+  wrap it correctly (`curve(values, dates)`), but a raw `axis.plot` in a notebook
+  needs `plot(dates, values)`. Applying the `curve` convention to a bare
+  `plot` silently transposes the figure rather than raising, so the plot renders
+  and looks wrong only if you read the axes.
+
 - **navi's areas have owners** — `lib/data`, `lib/models`, `lib/plots` and
   `lib/trading` belong to **alef**. navi carries no tests of its own: they live
   with the owner (`alef/tests`). `yada` consumes the library and owns none of it.

@@ -107,7 +107,7 @@ and `value` alone.
 
 ### What does not go here
 
-**CDC Socrata.** It has a working API, so its 2,502 series are catalog-only and
+**CDC Socrata.** It has a working API, so its 2,346 series are catalog-only and
 are fetched live through the `cdc_series_data` MCP tool. Only sources without a
 usable API are stored. Those Socrata series *are* discoverable, though — they sit
 in [`series_catalog`](series-catalog.md) alongside the 180 stored ones, which is
@@ -252,11 +252,46 @@ Compare FRED, where the first box is `FredClient` and it reads an HTTP API
 instead. Everything downstream — `SeriesRef`, `cache_id`, report rendering — is
 unchanged.
 
+## The CDC pipeline, in order
+
+Nothing else records the sequence, and several steps are `python -m` only. Run
+from `notebooks/cdc/` unless noted.
+
+| # | Step | Command | Notes |
+| --- | --- | --- | --- |
+| 1 | fetch the raw files | `downloads.ipynb` | no-op if the tree is complete; `refresh=True` to re-pull |
+| 2 | build the `.jsonl` | `python -m utils.build_timeseries` | offline; runs the parse guards |
+| 3 | load observations | `load_timeseries.load_all(Path("notebooks/cdc/data/timeseries"))` | reports what moved |
+| 4 | export the Socrata catalog | `catalog.ipynb` | ~17 live Socrata queries |
+| 5 | export the stored catalog | `python -m utils.catalog_timeseries` | merges WONDER + NVSR into `dataset.yaml` |
+| 6 | apply descriptions | `descriptions.apply_to_catalog(data_dir, "cdc")` | **must precede step 8** |
+| 7 | normalize | `python -m utils.normalize_catalog` | adds the `_int` date mirrors |
+| 8 | load the catalog | `load_catalog.load(data_dir, "cdc")` | upserts and **prunes** |
+
+Two orderings are load-bearing rather than stylistic.
+
+**Step 5 after step 4.** `export_cdc_catalog` writes `dataset.yaml` with only
+the Socrata groups it produced — no merge — so running step 4 alone leaves the
+index claiming 2,346 series over 6 groups and silently dropping the WONDER and
+NVSR registrations. Step 5 puts them back, giving 2,526 over 8.
+
+**Step 6 before step 8.** The export writes group files with no `description`,
+and the loader takes the YAML as authoritative. Skipping the description merge
+blanks the column for all 2,526 rows, and nothing complains.
+
+`descriptions.generate` is the expensive one — roughly 37 `claude-opus-5` calls
+at `max_tokens=16000`, i.e. real money. `apply_to_catalog` only merges the
+existing sidecar and is free; that is the one step 6 needs.
+
 ## Loading
 
 `db_import/load_timeseries.py` upserts normalized `.jsonl` from
-`notebooks/cdc/data/timeseries/` — built by `wonder_series.py` and
-`nvsr_series.py` — on the `(source, native_id, frequency)` conflict target.
+`notebooks/cdc/data/timeseries/` on the `(source, native_id, frequency)`
+conflict target. Those files come from `python -m utils.build_timeseries`, run
+from `notebooks/cdc/` — it calls `nvsr_series.build_all` and
+`wonder_series.build_all` and writes both files. Neither builder touches the
+network; both verify before emitting, so a bad parse or a missing WONDER
+download summary stops the build rather than producing quietly wrong series.
 `source_id` and `created_at` are deliberately left untouched: a refresh updates a
 series, it does not replace its identity. `expires_at` is computed here, from
 `ttl_days`.

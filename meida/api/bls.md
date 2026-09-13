@@ -387,6 +387,26 @@ Each record + `survey.yaml` gives the document store everything it needs:
   occupational *structure*; not a trend. For occupation *trends* use CPS (LN/LE),
   which are real time series at coarser occupation granularity.
 
+### Observations on disk
+
+`surveys.ipynb` also downloads **series observations**, which is easy to miss
+because the notebook is named for the catalog:
+
+```python
+# cell 9
+await fetch_series(["LNS14000000", "CUUR0000SA0", "CES0000000001"],
+                   "notebook_downloads/bls_headline.yaml",
+                   start_year=2015, end_year=2024, calculations=True)
+```
+
+`fetch_series` (`utils.py`) batches by 50 through the `bls_series_data` MCP tool
+and writes dated observation rows — `date`, `value`, `period`, plus
+`calculations.net_changes` — to `notebooks/bls/notebook_downloads/`. That is a
+different tree from the catalog in `data/`, and a different kind of content.
+
+BLS is therefore one of three sources that land observations on disk, alongside
+CDC and Voteview — not a catalog-only source.
+
 ### Regeneration
 
 Run from `notebooks/bls/` (functions in `utils.py`):
@@ -401,6 +421,11 @@ write_all_series_yaml(CORE_SURVEYS, popular=popular)  # -> data/bls_series_<CODE
 
 `fetch_bls_source_files` downloads each survey's `.series` + needed lookups (and
 `overview.txt`) to `/tmp/bls_source`; the writers read that and write to `data/`.
+
+**`/tmp` is the point to notice.** The raw flat files land outside the repo and
+do not survive a reboot, so "regenerable" for BLS means redoing the ~75-minute
+bot-filtered download, not re-running a local build from files already present.
+Everything in `data/` is derived from a source tree that is probably gone.
 `fetch_popular_ids` fetches each survey's ~25 most-popular series IDs from the
 **API** (one request per survey) so records get `is_popular` set.
 `export_oe_national()` wraps OE's larger process into one call — it streams

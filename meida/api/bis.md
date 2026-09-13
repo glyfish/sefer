@@ -514,7 +514,10 @@ Each record + `dataflow.yaml` gives the document store everything it needs:
 
 ### Regeneration
 
-Run from `notebooks/bis/` (functions in `utils.py`):
+**No notebook calls this.** `export_bis_catalog` is defined at
+`notebooks/bis/utils.py:467` and referenced nowhere else in the repo — no cell,
+no `__main__`. The 18 MB / 26,902-series catalog on disk exists because someone
+typed the call into a REPL. Run it the same way, from `notebooks/bis/`:
 
 ```python
 count = await export_bis_catalog()   # 22 flows -> data/dataflow.yaml + bis_series_<FLOW>.yaml

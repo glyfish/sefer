@@ -365,7 +365,7 @@ and the catalog's `facets` keys are the same dictionaries, so they cannot drift.
 
 `export_cdc_catalog()` walks each spec and writes the **series catalog** to
 `notebooks/cdc/data/` (gitignored, regenerable; run via `catalog.ipynb`): a
-`dataset.yaml` index + one `cdc_series_<group>.yaml` per source group. **2,502
+`dataset.yaml` index + one `cdc_series_<group>.yaml` per source group. **2,346
 atomic Socrata series** — one per facet permutation, like FRED/BIS.
 
 Each entry carries **normalized `facets`** plus descriptive metadata (`concept`,

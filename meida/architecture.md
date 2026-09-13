@@ -116,7 +116,7 @@ with no provider behind it at all.
 | `clients/` | Async vendor clients: `fred.py`, `tiingo.py`, `bls.py`, `bis.py`, `cdc.py`, `wonder.py` |
 | `clients/models/` | Frozen pydantic models of each vendor's **wire format** |
 | `alembic/`, `alembic.ini` | Migrations for the two tables; the URL comes from `get_meida_db_url()` |
-| `notebooks/{fred,tiingo,bls,bis,cdc}/` | Three notebooks per source plus a `utils.py` of helpers (§9) |
+| `notebooks/{fred,tiingo,bls,bis,cdc,voteview}/` | Three notebooks per source plus a `utils.py` of helpers; CDC keeps its modules in `utils/` and adds `downloads.ipynb` (§9) |
 | `tests/` | 384 tests over the server, the clients, the response models and the SQL readers (§7) |
 | `requirements.in` / `.txt` | Runtime deps, pip-compiled; includes `-e ../navi` |
 | `requirements-dev.in` / `.txt` | Test-only deps (pytest, pytest-asyncio) |
@@ -465,7 +465,7 @@ and a fourth for sources that are downloaded rather than queried:
 
 A source with no live API has to be pulled in bulk and parsed from disk, and
 those pulls are slow, rate-limited, or both: CDC's is ~15 minutes of FTP for
-936 workbooks plus ~40 minutes of WONDER at one query per two minutes. That
+885 workbooks plus ~40 minutes of WONDER at one query per two minutes. That
 changes what the code around it has to do.
 
 **A notebook rather than a script**, for two reasons. The saved cell output is
@@ -493,7 +493,10 @@ Four properties every such fetcher needs, all learned by getting them wrong:
   everything on disk and raise rather than emitting quietly-wrong series.
 
 Sources using it today: **CDC** (NVSR life tables, WONDER cause-of-death
-rates). Sources fetched live from an API do not need one.
+rates) and **Voteview** (the DW-NOMINATE panel). Sources fetched live from an
+API do not need one — though BLS comes close, since its catalog is downloaded
+rather than queried; its equivalent is `surveys.ipynb` rather than a
+`downloads.ipynb`.
 
 `client.ipynb` earns its place by being redundant: running both is how you see
 what the server translates. Tiingo's wire format is camelCase and its client
@@ -507,16 +510,85 @@ its category tree in `categories/` and `series/`, BLS has `surveys.ipynb`, and
 CDC carries the largest set (`catalog.py`, `discovery.ipynb`, `wonder.ipynb`,
 `downloads.ipynb`, and the builders; the loaders are shared, in `db_import/`).
 Those outputs are **git-ignored and regenerable**, and the sizes are why — the
-four catalogs come to roughly 380 MB on disk, none of it in the repo. The one
-exception is the normalized `.jsonl`, committed because NCHS revises published
-data in place — see [conventions](../conventions.md).
+generated data comes to roughly 400 MB on disk, none of it in the repo. That
+includes the normalized `.jsonl`: it was briefly tracked and is not any more
+(`a1aa12d`), because a provider revising in place is caught by
+`load_timeseries` reporting what moved rather than by a git diff someone has to
+remember to read.
 
 | Source | Discovery model | Output (ignored) | Size |
 | --- | --- | --- | --- |
 | FRED | Category tree walk from the top-level categories → leaf categories → series per leaf | `notebooks/fred/{categories/category_data,series/series_data}/` | 206 MB |
-| BLS | Flat-file catalog from `download.bls.gov` → survey + series metadata | `notebooks/bls/data/` (catalog), `notebook_downloads/` (raw files) | 148 MB, 288,085 series |
+| BLS | Flat-file catalog from `download.bls.gov` → survey + series metadata | `notebooks/bls/data/` (catalog, 148 MB). Raw flat files go to **`/tmp/bls_source`**, outside the repo; `notebook_downloads/` holds *observations*, not raw files | 148 MB, 288,085 series |
 | BIS | SDMX structure resources + one bulk pull per dataflow for coverage dates | `notebooks/bis/data/` | 18 MB, 26,902 series across 22 dataflows |
 | CDC | Hand-written registry of curated datasets → facet cross-product per dataset, plus the NVSR/WONDER downloads (§9) | `notebooks/cdc/data/` | 25 MB, 2,526 catalog entries |
+| Voteview | No catalog — a static-file download of the DW-NOMINATE panel | `notebooks/voteview/data/` | 6 MB, 51,064 member-Congress rows |
+
+### Every writer, and where it writes
+
+The table above is per source; this is per *writer*, because several sources
+have more than one and they do not all land in the same place. Everything here
+is gitignored.
+
+| Source | Writer | Pulls from | Writes | Kind |
+| --- | --- | --- | --- | --- |
+| FRED | `categories/*.ipynb` (8) → `find_leaf_categories` | FRED API via MCP | `categories/category_data/*.yaml` (14) | catalog |
+| FRED | `series/series_info.ipynb` → `export_finance_category_series` | FRED API via MCP | `series/series_data/*.yaml` (14, 206 MB) | catalog |
+| BLS | `surveys.ipynb` cell 6 → `fetch_bls_source_files` | `download.bls.gov` | **`/tmp/bls_source/`** — outside the repo | raw |
+| BLS | `surveys.ipynb` cell 6 → `write_survey_yaml`, `write_all_series_yaml` | the flat files above | `notebooks/bls/data/*.yaml` (24, 148 MB) | catalog |
+| BLS | `surveys.ipynb` cell 9 → `fetch_series` | BLS API via MCP | `notebook_downloads/bls_headline.yaml` | **observations** |
+| BIS | `export_bis_catalog()` — **REPL-only, no notebook calls it** | BIS SDMX | `notebooks/bis/data/*` (23, 18 MB) | catalog |
+| CDC | `downloads.ipynb` → `utils/fetch.py` | `ftp.cdc.gov`, WONDER API | `data/nvsr/**/*.xlsx`, `data/wonder/*.json` | **observations** |
+| CDC | `catalog.ipynb` → `utils/catalog.py` | Socrata | `data/cdc_series_*.yaml`, `data/dataset.yaml` | catalog |
+| CDC | `utils/catalog_timeseries.py` — `python -m` only | local | `data/cdc_series_{wonder,nvsr}.yaml`, merges `dataset.yaml` | catalog |
+| CDC | `wonder.ipynb` | WONDER API | `data/wonder/alcohol_D*.json` | **observations** |
+| Voteview | `downloads.ipynb` → `fetch.py` | `voteview.com` static files | `notebooks/voteview/data/*.csv` | **observations** |
+| Tiingo | — none — | — | — | — |
+
+Three things this corrects, all of which were believed otherwise:
+
+**BLS downloads observations too**, not just a catalog — `surveys.ipynb` cell 9
+writes `bls_headline.yaml`. So three sources land observations on disk: CDC,
+Voteview and BLS.
+
+**BLS's raw flat files land in `/tmp/bls_source`**, not the repo. `/tmp` does
+not survive a reboot, so "regenerable" for BLS means redoing the ~75-minute
+bot-filtered pull, not re-running a local build. `export_oe_national` also
+streams a ~1.26 GB `oe.series` through there and deletes it unless
+`keep_full=True`.
+
+**Tiingo persists nothing.** It is the only source with no data directory —
+purely live-fetch, no catalog. Worth knowing before looking for one.
+
+### FRED: what the catalog covers, and what it skips
+
+FRED's is the largest generated tree and the only one built in two stages: the
+eight `categories/*.ipynb` walk the tree and record leaves, then
+`series/series_info.ipynb` merges each leaf file with the series metadata for
+its leaves. The result is **220,401 series records in 944 category records** —
+metadata only, no observations. `observation_start`/`observation_end` are
+coverage bounds. yada's `fred_document_loader` is the consumer.
+
+Coverage is deliberate and partial. Across the eight notebooks 89 categories
+are inspected and 14 are used as export roots; 82 of the rest are waypoints
+inside an exported branch. Six sit outside every branch, and three of those are
+the substance:
+
+| Skipped | Why |
+| --- | --- |
+| `27281` States | 53 sub-categories each with its own deep tree — it would dwarf the rest of the catalog |
+| `32071` Federal Reserve Districts | same reason, smaller scale |
+| `32233` Freddie Mac Regions | same reason, smaller scale |
+
+**Deferred, not rejected.** The exploration cells in `regional_data.ipynb` are
+kept so this can be revisited without re-walking: they already hold the
+children and counts. Adding a branch is one `find_leaf_categories(27281,
+"States", "fred_regional_states_27281.yaml")` call plus the matching entry in
+`series_info.ipynb`.
+
+Cost, and the reason not to re-run casually: one API call per node at a 2 second
+pause. A 160-leaf branch is about six minutes; the full set is over an hour of
+FRED's 120 req/min budget.
 
 For **BLS** the catalog is built from the **flat files**, not the API — the API
 can only enumerate ~25 popular series per survey and lacks coverage dates. The
@@ -539,7 +611,7 @@ which keeps the tool's accepted vocabulary and the catalog's `facets` metadata
 keys identical by construction. `catalog_timeseries.py` does the same for the
 two file-delivered sources, `descriptions.py` adds LLM-generated prose for the
 document store, and `load_catalog.py` / `load_timeseries.py` put the results in
-Postgres — the 2,502 Socrata entries plus 180 stored ones are the 2,682 rows
+Postgres — the 2,346 Socrata entries plus 180 stored ones are the 2,526 rows
 `series_catalog` holds. See [api/cdc.md](api/cdc.md) and
 [api/wonder-nvsr.md](api/wonder-nvsr.md).
 
@@ -585,7 +657,7 @@ knew their facets, and the catalog YAML that knows they exist is gitignored
 build output that no runtime code reads.
 
 Each row carries a **`retrieval` block naming its fetch tool**, which is what
-lets one listing span both routes. Of the 2,682 rows today, 2,346 point at
+lets one listing span both routes. Of the 2,526 rows today, 2,346 point at
 `cdc_series_data` (live Socrata), 180 at `timeseries_source_data` (stored), and
 156 at nothing — state-level life-expectancy snapshots that are a multi-query
 union with no single-call route. A row's `facets` keys are exactly the arguments

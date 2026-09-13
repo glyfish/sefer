@@ -279,9 +279,11 @@ add or remove deaths consistently. It is NCHS revising death certificates
 after publication, and despair_composite differs in exactly the same years by
 exactly the same amounts because it contains drug_induced.
 
-That is also why `notebooks/cdc/data/timeseries/*.jsonl` is committed while
-the raw pulls are gitignored: a re-pull surfaces an upstream revision as a
-reviewable diff instead of silently changing the numbers.
+That is why the load reports what moved. `db_import/load_timeseries.py`
+compares each incoming series against what is stored before upserting, so an
+upstream revision is named — `CHANGED cdc/drug_induced (2 observations)` —
+rather than silently applied. The `.jsonl` itself is gitignored like the rest
+of the tree.
 
 ## Known gaps / open items
 

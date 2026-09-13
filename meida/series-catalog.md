@@ -1,7 +1,7 @@
 # meida Series Catalog
 
 > **Status: built** (2026-09-07). Migration `8f31c0a4e7d2` is applied, the client
-> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 2,682 entries
+> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 2,526 entries
 > are loaded, all under `source = "cdc"`.
 
 The discovery half of meida's database.
@@ -27,9 +27,9 @@ ask for `chronic_liver_mortality` in Texas, age-adjusted — but only because yo
 had somehow learned that those were the right words, that a
 `chronic_liver_mortality` concept existed at all, and that it was published for
 Texas. `cdc_discover` searches CDC's **dataset** portal, which is a different
-question: it finds the datasets, not the 2,502 series inside them.
+question: it finds the datasets, not the 2,346 series inside them.
 
-The thing that *did* know all 2,502 existed was the exported catalog YAML under
+The thing that *did* know all 2,346 existed was the exported catalog YAML under
 `notebooks/cdc/data/` — [gitignored, regenerable build
 output](../conventions.md) that **no runtime code read**. On a clean checkout it
 does not exist at all. So the knowledge was real, written down, and unreachable
@@ -116,7 +116,7 @@ gets it* — which is strictly better than a recipe that fails when replayed.
 Because the prose cannot tell these series apart, and the facets can.
 
 Descriptions are generated **one LLM call per bucket** of series that differ only
-by facet value — 2,682 series collapse into ~38 `(group, concept, facet-shape,
+by facet value — 2,526 series collapse into ~37 `(group, concept, facet-shape,
 unit)` buckets. That is deliberate and correct: within a bucket the series really
 do describe the same thing, and the per-series distinctions are already in
 `facets`. But it means free-text ranking has almost nothing to rank.
@@ -160,7 +160,7 @@ Two decisions worth keeping:
   first three of nine hundred" — which is the difference between a finished
   answer and a misleading one.
 - **`limit` is clamped to `MAX_LIMIT = 200`.** A facetless query would otherwise
-  hand an entire 2,682-row catalog to a model's context window.
+  hand an entire 2,526-row catalog to a model's context window.
 
 Models are in `mcp_server/series_catalog_models.py`: `CatalogEntry`,
 `CatalogSearchResult` (`total`, `returned`, `entries`), `CatalogConcept` and
@@ -248,6 +248,6 @@ database, not by reading the loader or the YAML.
 | Active | 1,511 |
 | Provisional | 442 |
 
-The 2,502 Socrata entries match the group table in
+The 2,346 Socrata entries match the group table in
 [api/cdc.md](api/cdc.md#series-catalog-built) exactly; the extra 180 are the
 stored series, which that generator does not produce.

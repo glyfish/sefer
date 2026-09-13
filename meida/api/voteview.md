@@ -62,6 +62,30 @@ The gate was first set at 0.40, which discarded 53 of 119 Congresses including
 the Gilded Age peak — an overcorrection for a confound worth 7.5%. At 0.25 the
 gaps are the genuinely one-party Congresses and the series is otherwise whole.
 
+**What it actually removes** (verified against the panel, every one under the
+threshold, none above):
+
+| Chamber | Stored | Absent | Second party |
+| --- | --- | --- | --- |
+| House | 110 / 119 | 1805, 1807, 1817–1821, 1865, 1867, 1935, 1937 | 14.0 – 23.8% |
+| Senate | 104 / 119 | 1803–1813, 1819, 1821, 1863–1871, 1935, 1937 | 9.4 – 24.3% |
+
+Three eras: Jefferson's second term into the Era of Good Feelings,
+Reconstruction, and the post-1934 landslides.
+
+The Senate loses more because 30-odd seats cross the threshold more easily than
+200 — a chamber-size artefact, not a political difference, so a divergence
+between the two lines inside 1803–1813 or 1863–1871 is reading the gate rather
+than the data.
+
+**Two Congresses sit on the line.** 1871 gates at 24.0% and 1935 at 24.3%, both
+within a seat or two of surviving. If `BALANCED` ever moves, those move first.
+
+Because the gated Congresses are simply absent from the series rather than
+stored as nulls, a line plot will join the Congresses either side and draw
+through values that were never computed. `utils.break_gaps` reindexes onto the
+full two-year grid with NaN so the line breaks instead.
+
 ## Retrieval
 
 No live API. The CSVs are downloaded, reduced offline, and loaded:

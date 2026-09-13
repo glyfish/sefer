@@ -31,6 +31,16 @@ who owns what.
   `navi-3.14.7` env is deliberately minimal so an undeclared import fails there
   rather than in whoever installs navi next — `navi/scripts/check_imports.py`
   checks it, and nothing else should be installed into it.
+- **A plot of stored data names its rows** — the notebook plot helpers stamp
+  the `native_id`s along the bottom edge (`stamp_source`). The title says what
+  the measure means; the stamp says what to ask the database for to get the
+  same numbers back, which a title cannot.
+- **A missing observation breaks the line, it does not interpolate** — where a
+  measure declines to produce a value (Voteview's representation gate), the
+  series simply has no row for that period, and a line plot will draw straight
+  through the hole. `break_gaps` reindexes onto the full grid with NaN so the
+  absence shows as absence.
+
 - **`lib.plots.curve` takes `(y, x)`, matplotlib takes `(x, y)`** — the helpers
   wrap it correctly (`curve(values, dates)`), but a raw `axis.plot` in a notebook
   needs `plot(dates, values)`. Applying the `curve` convention to a bare

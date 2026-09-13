@@ -59,7 +59,7 @@ a migration.
 | `units` | text, null | |
 | `frequency` | text, null | |
 | `provisional` | boolean | Revised in later releases (VSRR counts). 442 rows. |
-| `is_active` | boolean, null | Still being updated, judged **per vintage** so provisional data does not make final data look stale. 1,511 rows. |
+| `is_active` | boolean, null | **NULL on all 2,534 rows** — the exporters have never written it, deferred with the document-store redesign. The column and the index exist; the data does not. |
 | `facets` | jsonb | The values that pick this series out of its dataset. |
 | `retrieval` | jsonb | Which tool fetches it, and with what. |
 | `observation_start` / `observation_end` | date, null | Coverage bounds. |
@@ -149,6 +149,14 @@ into `asyncio.to_thread`. Errors translate to `SeriesCatalogError`.
 ```python
 async def search(*, source=None, dataset_id=None, concept=None, facets=None,
                  active_only=False, limit=50) -> tuple[list[CatalogEntry], int]
+```
+
+`active_only` stays on the client and is tested, but is **not exposed as a
+tool argument**: `is_active` is NULL on every row, so the filter could only
+ever return nothing. A switch that silently empties the result is worse than
+an absent one. Restore it when the exporters populate the field.
+
+```python
 async def get(series_id, source="cdc") -> CatalogEntry
 async def concepts(source=None) -> list[dict]
 ```
@@ -180,7 +188,7 @@ default suite hermetic.
 | Tool | Returns | Notes |
 | --- | --- | --- |
 | `series_catalog_concepts` | `CatalogConceptList` | The coarse map: concept × dataset with a series count. Start here. |
-| `series_catalog_search` | `CatalogSearchResult` | Exact filters — `dataset_id`, `concept`, `facets`, `active_only`. |
+| `series_catalog_search` | `CatalogSearchResult` | Exact filters — `dataset_id`, `concept`, `facets`. No `active_only`: see `is_active` above. |
 | `series_catalog_entry` | `CatalogEntry` | One entry by `series_id`. |
 
 `series_catalog_concepts` reports a concept **once per dataset**, not once

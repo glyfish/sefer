@@ -415,7 +415,7 @@ Socrata series only if you already knew its facets.
 
 | tool | answers |
 | --- | --- |
-| `series_catalog_search` | which series exist — exact filters on `source`, `dataset_id`, `concept` and `active_only`, plus JSONB containment on `facets`; capped at 200 rows and returning `total` alongside `returned`, so a truncated result is visible as one |
+| `series_catalog_search` | which series exist — exact filters on `source`, `dataset_id` and `concept`, plus JSONB containment on `facets`; capped at 200 rows and returning `total` alongside `returned`, so a truncated result is visible as one |
 | `series_catalog_entry` | one entry by `series_id` |
 | `series_catalog_concepts` | the coarse map: concept × dataset with series counts |
 

@@ -113,12 +113,11 @@ with no provider behind it at all.
 | `mcp_server/cdc_query.py` | Turns facet tokens into SoQL; derives the enums the tool advertises |
 | `mcp_server/timeseries_source.py` + `_models.py` | Reader for the `time_series_source` table (§10) |
 | `mcp_server/series_catalog.py` + `_models.py` | Reader for the `series_catalog` table (§10) |
-| `mcp_server/wonder_source.py` | WONDER by concept out of the database; not exposed as a tool |
 | `clients/` | Async vendor clients: `fred.py`, `tiingo.py`, `bls.py`, `bis.py`, `cdc.py`, `wonder.py` |
 | `clients/models/` | Frozen pydantic models of each vendor's **wire format** |
 | `alembic/`, `alembic.ini` | Migrations for the two tables; the URL comes from `get_meida_db_url()` |
 | `notebooks/{fred,tiingo,bls,bis,cdc,voteview}/` | Three notebooks per source plus a `utils.py` of helpers; CDC keeps its modules in `utils/` and adds `downloads.ipynb` (§9) |
-| `tests/` | 384 tests over the server, the clients, the response models and the SQL readers (§7) |
+| `tests/` | 480 tests over the server, the clients, the response models and the SQL readers (§7) |
 | `requirements.in` / `.txt` | Runtime deps, pip-compiled; includes `-e ../navi` |
 | `requirements-dev.in` / `.txt` | Test-only deps (pytest, pytest-asyncio) |
 | `pytest.ini` | `testpaths=tests`, `pythonpath=.`, `asyncio_mode=auto` |
@@ -388,7 +387,7 @@ a consumer was told an object came back and nothing else.
 
 ## 7. Testing strategy
 
-All tests live in **meida** (`tests/`). **384 tests, ~0.7 s**, no network and no
+All tests live in **meida** (`tests/`). **480 tests, ~0.8 s**, no network and no
 database required.
 
 | File(s) | Tests | Covers |
@@ -400,7 +399,6 @@ database required.
 | `test_{timeseries_source,series_catalog}_client.py` | 26 | The SQL readers — filters, ordering, counting, staleness |
 | `test_timeseries_builders.py` | 19 | The WONDER D76/D158 splice and the NVSR table → (race, sex) mapping |
 | `test_cdc_catalog.py` | 10 | The catalog registry and build logic in `notebooks/cdc/utils/catalog.py` |
-| `test_wonder_source.py` | 7 | Concept → stored identifier, `stored_only` as the default, and that a miss fails loudly instead of reaching for the network |
 
 Three techniques carry the suite:
 
@@ -648,12 +646,12 @@ differs from yada's cache, whose columns the table otherwise mirrors so that
 moving a series across is a straight copy. See
 [time-series-source.md](time-series-source.md).
 
-`WonderSourceClient` (`mcp_server/wonder_source.py`) is a thin layer on top that
-looks a series up **by concept** rather than by native id, with
-`stored_only=True` by default: a miss raises, naming the concepts that *are*
-available, instead of silently costing two minutes and a request against a rate
-limit nobody wants to spend. It has no MCP tool — notebooks and tests are its
-consumers.
+WONDER has no client of its own. A `WonderSourceClient` wrapper was removed: it
+was never wired into the server, both of its branches raised, and its docstring
+promised a live fallback that did not exist. The nine concepts are served by the
+generic tools and advertised by their `series_catalog` rows, whose `retrieval`
+block names `timeseries_source_data` and the native id. See
+[time-series-source.md](time-series-source.md).
 
 ### `series_catalog` — which series exist, and what fetches them
 
@@ -742,7 +740,7 @@ the simplest. Order matters — explore before you model.
 
 ```bash
 python -m mcp_server.server      # FastMCP, SSE, 0.0.0.0:8080 → /sse
-pytest tests                     # 384 tests, no network
+pytest tests                     # 480 tests, no network
 alembic upgrade head             # the two tables; URL from get_meida_db_url()
 ```
 

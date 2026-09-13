@@ -200,43 +200,38 @@ document store rather than here.
 They share a `_call_timeseries_source` helper, which owns client lifecycle and
 wraps a returned list in `TimeSeriesRefList`.
 
-## `WonderSourceClient`
+## WONDER needs no client of its own
 
-`mcp_server/wonder_source.py` is a thin, WONDER-shaped face over the same table.
-Where `TimeSeriesSourceClient` takes a `source` and a `native_id`, this takes a
-**concept** — `alcohol_induced`, `suicide`, `firearm` — and builds the identifier
-itself, since every stored WONDER series is national and age-adjusted and the
-concept is the only part that varies:
+There was a `WonderSourceClient` here — a WONDER-shaped face over the same
+table, taking a **concept** (`alcohol_induced`, `suicide`, `firearm`) and
+building the identifier itself, since every stored WONDER series is national and
+age-adjusted:
 
 ```python
-SOURCE = "cdc_wonder"
 NATIVE_ID = "cdc/{concept}/wonder/national/age_adjusted"
 ```
 
-`list_concepts()` is the discovery step: what can be served without touching the
-network. `get_series(concept)` returns one in full.
+It was removed. It was never wired into the server, both of its branches raised
+(`stored_only=True` gave `WonderNotStoredError`, `stored_only=False` gave
+`NotImplementedError`), and its docstring advertised a live fallback that did
+not exist. The nine series are served by the generic `timeseries_source_*`
+tools, are listed by `timeseries_source_list(source="cdc_wonder")`, and each
+carries a `series_catalog` row whose `retrieval` block names the tool and id:
 
-### Why `stored_only` defaults to `True`
+```json
+{"tool": "timeseries_source_data", "source": "cdc_wonder",
+ "native_id": "cdc/alcohol_induced/wonder/national/age_adjusted"}
+```
 
-Because the alternative costs a rate-limited request that nobody chose to spend.
-A live WONDER query is throttled to one per 120 seconds behind a bot filter, so
-a fallback-by-default turns a typo into a two-minute stall that *looks like it
-worked*. With `stored_only=True` a miss raises `WonderNotStoredError` immediately,
-carrying the fix — the concepts that **are** loaded, or a pointer to
-`load_timeseries` when the table is empty. A miss should be a loud failure you
-repair by loading the data, not a slow success.
+So a consumer needs no WONDER-specific knowledge and the server needs no
+WONDER-specific code. `source` is a column value, not a code path — the same
+statement that makes NVSR and Voteview work unchanged.
 
-The flag makes the safe path the default rather than a convention someone has to
-remember. Turning it off does not currently buy a live fetch either:
-`stored_only=False` raises `NotImplementedError`, because fetching a concept
-means choosing its ICD-10 code set and stitching the D76 and D158 vintages —
-which `notebooks/cdc/utils/wonder_series.py` does as a deliberate offline step.
-
-Not exposed as an MCP tool; the server serves WONDER through the generic
-`timeseries_source_*` tools. `WonderSourceClient` is what
-`notebooks/cdc/client.ipynb` uses to drive the same arc without the server.
-Tested in `tests/test_wonder_source.py` (7 tests), against the same injected
-SQLite engine.
+There is still no live fetch, and that is deliberate rather than missing:
+choosing a concept's ICD-10 code set and stitching the D76 and D158 vintages is
+what `notebooks/cdc/utils/wonder_series.py` does as an offline step. A missing
+concept raises `TimeSeriesSourceError` naming the id, which you repair by
+loading the data, not by waiting two minutes on a throttled request.
 
 ## How consumers reach it
 

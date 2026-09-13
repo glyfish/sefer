@@ -252,7 +252,7 @@ suicide; X65 in both alcohol-induced and suicide).
 ## Reproducing the pulls
 
 Both sources are rebuildable from `notebooks/cdc/downloads.ipynb`; the
-functions live in `notebooks/cdc/fetch.py`. A notebook rather than a script
+functions live in `notebooks/cdc/utils/fetch.py`. A notebook rather than a script
 because the saved output is the record that a slow, throttled pull succeeded,
 and because re-running one should be deliberate.
 

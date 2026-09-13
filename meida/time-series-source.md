@@ -230,7 +230,7 @@ The flag makes the safe path the default rather than a convention someone has to
 remember. Turning it off does not currently buy a live fetch either:
 `stored_only=False` raises `NotImplementedError`, because fetching a concept
 means choosing its ICD-10 code set and stitching the D76 and D158 vintages —
-which `notebooks/cdc/wonder_series.py` does as a deliberate offline step.
+which `notebooks/cdc/utils/wonder_series.py` does as a deliberate offline step.
 
 Not exposed as an MCP tool; the server serves WONDER through the generic
 `timeseries_source_*` tools. `WonderSourceClient` is what

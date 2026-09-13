@@ -318,7 +318,7 @@ because repeating those cannot help.
 no MCP tool behind it. It uses `curl_cffi` rather than httpx (the bot filter
 wants a browser TLS fingerprint), takes no `client=` seam, and waits out its own
 throttle. Calling it from a tool handler would mean a two-minute request, so it
-is used offline by `notebooks/cdc/wonder_series.py` to build the series that
+is used offline by `notebooks/cdc/utils/wonder_series.py` to build the series that
 then load into Postgres.
 
 ---
@@ -398,7 +398,7 @@ database required.
 | `test_{fred,tiingo,bls,bis,cdc}_models.py` | 34 | Aliases, validators, defaults, immutability |
 | `test_{timeseries_source,series_catalog}_client.py` | 26 | The SQL readers — filters, ordering, counting, staleness |
 | `test_timeseries_builders.py` | 19 | The WONDER D76/D158 splice and the NVSR table → (race, sex) mapping |
-| `test_cdc_catalog.py` | 10 | The catalog registry and build logic in `notebooks/cdc/catalog.py` |
+| `test_cdc_catalog.py` | 10 | The catalog registry and build logic in `notebooks/cdc/utils/catalog.py` |
 | `test_wonder_source.py` | 7 | Concept → stored identifier, `stored_only` as the default, and that a miss fails loudly instead of reaching for the network |
 
 Three techniques carry the suite:
@@ -534,7 +534,7 @@ decoded dimension labels as well as the key. See [api/bis.md](api/bis.md).
 **CDC** cannot be enumerated: it is one Socrata API over a large, open-ended set
 of datasets with inconsistent schemas, so six useful ones are **curated** in
 `mcp_server/cdc_datasets.py` rather than discovered.
-`notebooks/cdc/catalog.py` imports that same registry to generate the catalog,
+`notebooks/cdc/utils/catalog.py` imports that same registry to generate the catalog,
 which keeps the tool's accepted vocabulary and the catalog's `facets` metadata
 keys identical by construction. `catalog_timeseries.py` does the same for the
 two file-delivered sources, `descriptions.py` adds LLM-generated prose for the

@@ -359,7 +359,7 @@ The **registry** is CDC's hand-written stand-in for BIS's SDMX structure: seven
 `Spec` entries covering four datasets, plus the two special-case specs (`StubSpec`
 for `9j2v-jamp`, `VsrrSpec` for `489q-934x`) and their value-normalization maps.
 It lives in `mcp_server/cdc_datasets.py` — with the server, because the server is
-its primary consumer — and `notebooks/cdc/catalog.py` imports from it rather than
+its primary consumer — and `notebooks/cdc/utils/catalog.py` imports from it rather than
 keeping a second copy. That import is the point: the tool's accepted vocabulary
 and the catalog's `facets` keys are the same dictionaries, so they cannot drift.
 

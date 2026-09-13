@@ -94,8 +94,24 @@ The standard trio, plus the downloader:
 | --- | --- |
 | `downloads.ipynb` | The two CSVs, and the size gate on the other two |
 | `mcp.ipynb` | The tools over SSE — schemas, calls, the catalog |
-| `walkthrough.ipynb` | Discovery → fetch → plot, no id known up front |
+| `walkthrough.ipynb` | Discovery → fetch → plot, no id known up front, then the deviation-from-mean view |
+| `nominate.ipynb` | Exploratory: what DW-NOMINATE is, member distributions, how the reductions were arrived at |
 | `client.ipynb` | `TimeSeriesSourceClient` directly, no server |
+
+### The derived view
+
+`walkthrough.ipynb` ends by centring `median_gap` on each chamber's own long-run
+mean (House 0.700, Senate 0.666) and filling by sign — above the line more
+polarized than that chamber's history, below it more aligned. It is computed in
+the notebook from the stored series rather than stored itself: a pure transform
+of one row with no additional input, so making it a ninth series would be the
+first derived-from-stored row in the table.
+
+The same plot is in `nominate.ipynb`, which reaches it from the raw panel. Both
+call `utils/voteview_series.py` for the reduction, so the exploratory notebook
+cannot drift from what is served -- `nominate.ipynb` keeps only one local
+function, an *ungated* ratio used to show what the representation gate
+suppresses, which by construction the module will not return.
 
 `client.ipynb` differs from every other source's: elsewhere it drives the vendor
 client, but Voteview has no per-request API, so the client beneath the tool *is*

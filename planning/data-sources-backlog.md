@@ -281,7 +281,7 @@ also makes it a RAG candidate rather than a numeric one.
 > Two tables carry it. **`series_catalog`** (2,682 rows, every one with an
 > LLM-written description) is discovery — what exists, which facets pick it
 > out, and a `retrieval` block naming the tool that fetches it. That block is
-> what lets one listing serve both routes. **`time_series_source`** (180
+> what lets one listing serve both routes. **`time_series_source`** (188
 > series, 1,119 observations) holds observations only for the file-delivered
 > sources, and stands in for the API endpoint they do not have; its TTL means
 > "due for a refresh", not "too old to serve". Socrata is deliberately absent

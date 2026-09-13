@@ -459,7 +459,7 @@ and a fourth for sources that are downloaded rather than queried:
 | --- | --- |
 | `mcp.ipynb` | Exploration through the server — what tools exist, their schemas, example calls |
 | `walkthrough.ipynb` | The narrative arc: discovery → fetch → plot, entirely over MCP |
-| `client.ipynb` | The *same* arc against the vendor client, with no server in the middle |
+| `client.ipynb` | The *same* arc against the client beneath the tool, with no server in the middle — the vendor client for an API-backed source, `TimeSeriesSourceClient` for a stored one |
 | `downloads.ipynb` | **File-delivered sources only** — how the raw files are fetched |
 
 ### `downloads.ipynb` — the pattern for file-delivered sources
@@ -616,7 +616,7 @@ which keeps the tool's accepted vocabulary and the catalog's `facets` metadata
 keys identical by construction. `catalog_timeseries.py` does the same for the
 two file-delivered sources, `descriptions.py` adds LLM-generated prose for the
 document store, and `load_catalog.py` / `load_timeseries.py` put the results in
-Postgres — the 2,346 Socrata entries plus 180 stored ones are the 2,526 rows
+Postgres — the 2,346 Socrata entries plus 188 stored ones are the 2,534 rows
 `series_catalog` holds. See [api/cdc.md](api/cdc.md) and
 [api/wonder-nvsr.md](api/wonder-nvsr.md).
 
@@ -635,8 +635,10 @@ annual life tables as Excel workbooks on an FTP tree with no programmatic year �
 volume mapping. Their observations are pulled once and stored here, so this
 table is **not a cache — it is the source of truth** for these series. Read by
 `TimeSeriesSourceClient`, served by `timeseries_source_list`,
-`timeseries_source_data` and `timeseries_source_stale`. It currently holds 180
-series: 171 NVSR, 9 WONDER.
+`timeseries_source_data` and `timeseries_source_stale`. It currently holds 188
+series: 171 NVSR, 9 WONDER, 8 Voteview. Voteview is the source that tested
+whether this path generalizes — it needed no server code at all, no client
+module and no `source`-specific branch. See [api/voteview.md](api/voteview.md).
 
 **Expiry means "due for a refresh", never "withhold".** `expires_at` here says
 when someone should go re-run the throttled WONDER pull or look for a new NVSR
@@ -662,8 +664,8 @@ knew their facets, and the catalog YAML that knows they exist is gitignored
 build output that no runtime code reads.
 
 Each row carries a **`retrieval` block naming its fetch tool**, which is what
-lets one listing span both routes. Of the 2,526 rows today, 2,346 point at
-`cdc_series_data` (live Socrata), 180 at `timeseries_source_data` (stored), and
+lets one listing span both routes. Of the 2,534 rows today, 2,346 point at
+`cdc_series_data` (live Socrata), 188 at `timeseries_source_data` (stored), and
 156 at nothing — state-level life-expectancy snapshots that are a multi-query
 union with no single-call route. A row's `facets` keys are exactly the arguments
 `cdc_series_data` takes, so a value read off a discovered series passes straight

@@ -1,7 +1,7 @@
 # meida Series Catalog
 
 > **Status: built** (2026-09-07). Migration `8f31c0a4e7d2` is applied, the client
-> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 2,526 entries
+> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 2,534 entries
 > are loaded, all under `source = "cdc"`.
 
 The discovery half of meida's database.
@@ -20,7 +20,7 @@ Before this table, meida could enumerate exactly one of its two kinds of series.
 | | Stored series (WONDER, NVSR) | Socrata series |
 | --- | --- | --- |
 | Fetch | `timeseries_source_data` | `cdc_series_data` |
-| Enumerate | `timeseries_source_list` — 180 series | **nothing** |
+| Enumerate | `timeseries_source_list` — 188 series | **nothing** |
 
 The Socrata half was reachable *only if you already knew its facets*. You could
 ask for `chronic_liver_mortality` in Texas, age-adjusted — but only because you
@@ -54,8 +54,8 @@ a migration.
 | `series_id` | text | e.g. `cdc/alcohol_binge/hksd-2xuw/state=ak/race=aian/age_adjusted`. |
 | `dataset_id` | text, null | Provider dataset. Null for the stored (WONDER/NVSR) series. |
 | `concept` | text, null | What is measured — `alcohol_binge`, `suicide`, `life_expectancy`. |
-| `title` | text | Formulaic, and **the discriminating field**: near-unique across 2,526 rows. |
-| `description` | text, null | LLM-generated **per bucket** — 37 distinct strings across 2,526 rows. |
+| `title` | text | Formulaic, and **the discriminating field**: near-unique across 2,534 rows (2,528 distinct). |
+| `description` | text, null | Per bucket, not per series — 41 distinct strings across 2,534 rows (37 LLM-generated for CDC, 4 carried from Voteview's measure definitions). |
 | `units` | text, null | |
 | `frequency` | text, null | |
 | `provisional` | boolean | Revised in later releases (VSRR counts). 442 rows. |
@@ -93,10 +93,10 @@ tool that fetches it:
 
 ```mermaid
 graph LR
-    Q["series_catalog_search"] --> C[("series_catalog<br/>2,526 entries")]
+    Q["series_catalog_search"] --> C[("series_catalog<br/>2,534 entries")]
     C --> R{"entry.retrieval<br/>.tool"}
     R -->|"cdc_series_data<br/>2,346"| S["Socrata API<br/>(live fetch)"]
-    R -->|"timeseries_source_data<br/>180"| T[("time_series_source<br/>(stored)")]
+    R -->|"timeseries_source_data<br/>188"| T[("time_series_source<br/>(stored)")]
 ```
 
 Both outcomes, verified against the live table:
@@ -104,7 +104,7 @@ Both outcomes, verified against the live table:
 | `retrieval.tool` | Rows | What it is |
 | --- | --- | --- |
 | `cdc_series_data` | 2,346 | Live Socrata fetch. |
-| `timeseries_source_data` | 180 | The stored series — 171 NVSR, 9 WONDER. |
+| `timeseries_source_data` | 188 | The stored series — 171 NVSR, 9 WONDER, 8 Voteview. |
 | `null` | 0 | Nothing today. Kept nullable as a guard, with a test behind it. |
 
 That last row is why `retrieval.tool` is nullable rather than assumed present. A
@@ -116,7 +116,7 @@ gets it* — which is strictly better than a recipe that fails when replayed.
 Because the prose cannot tell these series apart, and the facets can.
 
 Descriptions are generated **one LLM call per bucket** of series that differ only
-by facet value — 2,526 series collapse into ~37 `(group, concept, facet-shape,
+by facet value — 2,534 series collapse into ~41 `(group, concept, facet-shape,
 unit)` buckets. That is deliberate and correct: within a bucket the series really
 do describe the same thing, and the per-series distinctions are already in
 `facets`. But it means free-text ranking has almost nothing to rank.
@@ -160,7 +160,7 @@ Two decisions worth keeping:
   first three of nine hundred" — which is the difference between a finished
   answer and a misleading one.
 - **`limit` is clamped to `MAX_LIMIT = 200`.** A facetless query would otherwise
-  hand an entire 2,526-row catalog to a model's context window.
+  hand an entire 2,534-row catalog to a model's context window.
 
 Models are in `mcp_server/series_catalog_models.py`: `CatalogEntry`,
 `CatalogSearchResult` (`total`, `returned`, `entries`), `CatalogConcept` and
@@ -239,15 +239,15 @@ database, not by reading the loader or the YAML.
 
 | Cut | Count |
 | --- | --- |
-| Total entries | 2,526 |
+| Total entries | 2,534 |
 | Socrata (`cdc_series_data` route) | 2,346 |
-| Stored (`timeseries_source_data` route) | 180 |
+| Stored (`timeseries_source_data` route) | 188 |
 | Distinct datasets | 6, plus null |
-| Distinct concepts | 13 |
+| Distinct concepts | 14 |
 | Distinct descriptions | 38 |
 | Active | 1,511 |
 | Provisional | 442 |
 
 The 2,346 Socrata entries match the group table in
-[api/cdc.md](api/cdc.md#series-catalog-built) exactly; the extra 180 are the
+[api/cdc.md](api/cdc.md#series-catalog-built) exactly; the extra 188 are the
 stored series, which that generator does not produce.

@@ -142,7 +142,7 @@ FRED has **no single envelope** — the wrapper varies by endpoint.
 `FredClient` (`clients/fred.py`) covers 7 of the endpoints. The client and its
 models are **meida's** — they sat in `navi/lib/clients` while navi was assumed
 to be the shared home for everything, and moved here once it was clear meida
-was their only consumer. They still import navi's `lib.env` for keys and base
+was their only consumer. They read keys and base
 URLs.
 
 | Client method | Endpoint | MCP tool |

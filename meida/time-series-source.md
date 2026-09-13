@@ -302,7 +302,7 @@ series missing from it means "not re-pulled", not "gone".
 
 ## Configuration
 
-`MEIDA_DB_URL`, read by `get_meida_db_url()` in navi's `lib/env.py`, defaulting
+`MEIDA_DB_URL`, read by `get_meida_db_url()` in `meida/environment.py`, defaulting
 to `postgresql+psycopg://meida@localhost/meida`. Named for its **owner** rather
 than any consumer, so nothing in navi needs to know which project is asking —
 the same rule `get_cdc_base_url()` and friends follow.

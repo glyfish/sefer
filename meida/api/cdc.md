@@ -139,7 +139,7 @@ deaths, so we curate what exists and defer the exact measure:
 
 `CdcClient` (`meida/clients/cdc.py`) wraps the API. It used to live in
 `navi/lib/clients`; meida was the only consumer, so it moved here and now only
-borrows navi's genuinely shared bits (`lib.env`, `lib.logger`):
+borrows navi's genuinely shared bits (`lib.logger`):
 
 - `query(id, where=, select=, order=, group=, limit=, offset=)` → rows; `iter_all(…)`
   pages a whole dataset.
@@ -169,7 +169,7 @@ column names) and are how an uncurated dataset gets understood well enough to be
 curated. `cdc_series_data` and `cdc_dataset_facets` are the fetch interface, and
 they speak the catalog's vocabulary instead.
 
-**Config** in `lib/env.py`: `get_cdc_api_key()` (`CDC_API_KEY`, optional →
+**Config** in `environment.py`: `get_cdc_api_key()` (`CDC_API_KEY`, optional →
 `X-App-Token`) and `get_cdc_base_url()` (`CDC_BASE_URL`).
 
 **Notebooks + code** (`notebooks/cdc/`). Three of them are the shared per-source

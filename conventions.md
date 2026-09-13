@@ -40,7 +40,8 @@ who owns what.
   for everything; in practice meida is the only consumer (yada and alef import
   none of it), and keeping them in a library shipped to three repos meant a
   change made for meida's interface landed in yada's and alef's dependency.
-  They still import `lib.env` and `lib.logger`, which are genuinely shared.
+  They still import `lib.logger`, which is genuinely shared; keys and base URLs
+  now come from meida's own `environment.py`.
 - **Develop algorithms on simulated data first** (in `alef`); the matured model
   code then lands in `navi`, and `yada`'s pipeline applies it to *real* data.
   Developing against synthetic data guards against overfitting to the real series.

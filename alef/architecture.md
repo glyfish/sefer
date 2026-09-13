@@ -360,7 +360,7 @@ The `fetch_*` methods return pandas DataFrames and are the read path for the
 | navi resolution | editable install `-e ../navi`; pyright `extraPaths` |
 | `PYTHONPATH` | `.env` prepends the alef root; VSCode loads it via `python.envFile` |
 | DB URL | **hardcoded** in `BacktestDb.__init__`, duplicated in `alembic.ini` |
-| API keys | `navi/.env` via `lib/env.py` — unused by alef |
+| API keys | `meida/.env` via `meida/environment.py` — unused by alef |
 
 ### Plot style sheets and display targets
 

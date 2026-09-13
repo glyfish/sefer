@@ -161,10 +161,10 @@ checking (raises whenever `status != "REQUEST_SUCCEEDED"` despite HTTP 200, with
 bounded retry/backoff on transient 5xx/transport errors and no retry on a 4xx or
 a `REQUEST_NOT_PROCESSED`, which repeating cannot fix). The client and its models
 are **meida's** — they sat in `navi/lib/clients` until it was clear meida was
-their only consumer; they still import navi's `lib.env` and `lib.logger`. Five
+their only consumer; they still import navi's `lib.logger`. Five
 MCP tools in `mcp_server/server.py` expose it: `bls_series_data`,
 `bls_series_latest`, `bls_popular_series`, `bls_all_surveys`, `bls_survey_info`.
-Config in navi's `lib/env.py`: `get_bls_api_key()` (`BLS_API_KEY`, optional) and
+Config in `meida/environment.py`: `get_bls_api_key()` (`BLS_API_KEY`, optional) and
 `get_bls_base_url()`.
 
 ### What the tools publish

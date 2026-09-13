@@ -16,7 +16,8 @@ those tools.
 live in `navi/lib/clients`; they moved into meida because meida was the only
 consumer, and shipping them in a library installed into three repos meant a
 change made for meida's interface landed in yada's and alef's dependency. What
-meida still borrows from navi is `lib.env` (keys, base URLs, the database URL)
+meida still borrows from navi is the plot and analysis stack (`lib.config`,
+`lib.plots`, `lib.utils`)
 and `lib.logger` — genuinely shared — plus, in the notebooks, `lib.mcp_client`
 and the plotting stack.
 
@@ -38,7 +39,7 @@ graph TB
     end
 
     subgraph navi["navi (sibling repo)"]
-        ENV["lib/env.py<br/>keys · base URLs · db URL"]
+        ENV["environment.py<br/>keys · base URLs · db URL"]
         MCPC["lib/mcp_client.py<br/>SSE client"]
         PLOT["lib/plots · lib/utils"]
     end
@@ -127,7 +128,7 @@ with no provider behind it at all.
 
 | Path | Role |
 | --- | --- |
-| `lib/env.py` | API keys, base URLs and `MEIDA_DB_URL`, from `navi/.env` |
+| `environment.py` | API keys, base URLs and `MEIDA_DB_URL`, from `meida/.env` |
 | `lib/logger.py` | Colorized logger (`get_logger`) |
 | `lib/mcp_client.py` | SSE MCP client wrapper (`MCPClient`, `MCPClientConfig`) — how notebooks call the server |
 | `lib/plots/`, `lib/utils.py`, `lib/config.py` | matplotlib visualizations, helpers and style — imported directly by notebooks |
@@ -151,7 +152,7 @@ graph LR
     A --> C["Vendor clients<br/>clients/"]
     A --> D["SQL readers<br/>timeseries_source · series_catalog"]
     C --> M["Wire models<br/>clients/models"]
-    C --> E["Config<br/>lib/env.py"]
+    C --> E["Config<br/>environment.py"]
     C --> T["Transport<br/>httpx.AsyncClient"]
     D --> E
     D --> G["SQLAlchemy engine"]
@@ -424,8 +425,10 @@ APIs** — they pin the model layer to reality (they're what revealed BLS's
 
 ## 8. Configuration and secrets
 
-`navi/lib/env.py` is the single source of truth. It loads `navi/.env` at import
-(overridable with `NAVI_ENV_FILE`), so **both repos share one credentials file**.
+`meida/environment.py` is the single source of truth. It loads the `.env` beside
+it -- `meida/.env` -- at import, anchored to the module rather than the working
+directory (overridable with `MEIDA_ENV_FILE`), so a terminal run and a VS Code
+run resolve identically.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
@@ -699,10 +702,10 @@ Worth knowing before extending; none are currently breaking.
 - **156 catalog rows have no fetch tool** (`retrieval.tool` is null) — the
   state-level life-expectancy snapshots. They are discoverable but not
   retrievable in one call.
-- **`navi/.env.example` is behind `lib/env.py`.** It documents FRED, BLS,
-  Tiingo and `MCP_URL`, but not `BIS_BASE_URL`, `CDC_API_KEY`, `CDC_BASE_URL`
-  or `MEIDA_DB_URL` — a new checkout gets the defaults and has to find the rest
-  by reading the accessors.
+- ~~`navi/.env.example` is behind~~ — fixed. It moved to `meida/.env.example`
+  alongside the module that reads it, and now documents every variable
+  `environment.py` knows, including `BIS_BASE_URL`, `CDC_API_KEY`,
+  `CDC_BASE_URL` and `MEIDA_DB_URL`.
 
 ---
 
@@ -713,7 +716,7 @@ the simplest. Order matters — explore before you model.
 
 1. **Explore.** Hit each endpoint once, capture real responses as fixtures. Do
    not model from documentation alone.
-2. **Config.** Add `get_x_api_key()` / `get_x_base_url()` to `navi/lib/env.py`
+2. **Config.** Add `get_x_api_key()` / `get_x_base_url()` to `meida/environment.py`
    plus entries in `.env.example`.
 3. **Wire models.** `clients/models/x.py` — frozen, aliased, tolerant where the
    provider is inconsistent.

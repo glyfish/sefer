@@ -108,7 +108,7 @@ Unlike FRED and BLS, Tiingo has **no response envelope**.
 
 `TiingoClient` (`clients/tiingo.py`) covers both daily endpoints. The client and
 its models are **meida's** — they sat in `navi/lib/clients` until it was clear
-meida was their only consumer; they still import navi's `lib.env` for the token
+meida was their only consumer; they read the token from meida's own `environment.py`
 and base URL.
 
 | Client method | Endpoint | MCP tool |

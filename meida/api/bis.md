@@ -300,7 +300,7 @@ pre-break value across a *series break*, the closest thing to a revision signal.
 structure (with the version-pinned `Accept`), CSV for data (grouped into series
 by `_parse_csv`), and `BisAPIError` on HTTP errors. The client and its models are
 **meida's** — they sat in `navi/lib/clients` until it was clear meida was their
-only consumer; they still import navi's `lib.env`, whose `get_bis_base_url()` is
+only consumer; they use meida's `environment.py`, whose `get_bis_base_url()` is
 the whole configuration — **no key accessor, by design**. Three MCP tools in
 `mcp_server/server.py`:
 

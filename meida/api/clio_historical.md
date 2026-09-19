@@ -220,7 +220,7 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 | `notebooks/client.ipynb` | the two database clients, no server; the Netherlands kingdom |
 | `notebooks/mcp.ipynb` | over SSE: new series, a polity through its borders, successors |
 | `notebooks/explore.ipynb` | the look: layout, the comparison, Germany by border period |
-| `notebooks/inventory.ipynb` | what is there: filed, layouts, the papers, each relation drawn against the main site |
+| `notebooks/inventory.ipynb` | what is there: filed, layouts, coverage by decade, the papers, each relation against the main site |
 | `data/raw/<doi>/` | one deposit per DOI |
 | `data/datasets.json` | indicator → handle → DOI → dataset page |
 | `data/manifest.json` | DOI, title, version, release and download dates, sha256 — for folders filed by `accept()` |

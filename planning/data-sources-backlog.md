@@ -383,6 +383,17 @@ between the party medians per Congress). Straightforward, but not a plain load.
 
 ## 9. Clio-Infra — historical economic & well-being data
 
+> **Status: downloaded and surveyed, not yet built.** All 86 indicators
+> (11,044 country series, 902,291 observations, 1500–2018) are on disk and
+> measured. Licence **CC0-1.0**, which settles the question below. Four things
+> the evaluation did not anticipate: DataverseNL holds a newer version 1.1
+> (2026-01-08) behind a bot check scripts cannot pass; units are not in the
+> workbooks; much of the pre-1800 depth is model reconstruction or zero-filled
+> panels rather than measurement; and the series are stitched from sources
+> with visible joins, so the splice problem starts *inside* Clio. US coverage
+> is shorter than assumed — real wages from 1925. See the
+> [Clio-Infra reference](../meida/api/clio.md).
+
 **What it is.** Long-run datasets on **economic and social well-being** — GDP per
 capita, real wages, human height, life expectancy, literacy, income inequality —
 by country/region over the past several centuries (strongest coverage 1800→, some

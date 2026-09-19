@@ -524,6 +524,7 @@ remember to read.
 | BIS | SDMX structure resources + one bulk pull per dataflow for coverage dates | `notebooks/bis/data/` | 18 MB, 26,902 series across 22 dataflows |
 | CDC | Hand-written registry of curated datasets → facet cross-product per dataset, plus the NVSR/WONDER downloads (§9) | `notebooks/cdc/data/` | 25 MB, 2,526 catalog entries |
 | Voteview | No catalog — a static-file download of the DW-NOMINATE panel | `notebooks/voteview/data/` | 6 MB, 51,064 member-Congress rows |
+| Clio-Infra | The index page pairs each of 86 indicators with its workbook and published span | `notebooks/clio/data/` | 36 MB, 11,044 country series |
 
 ### Every writer, and where it writes
 
@@ -544,6 +545,7 @@ is gitignored.
 | CDC | `utils/catalog_timeseries.py` — `python -m` only | local | `data/cdc_series_{wonder,nvsr}.yaml`, merges `dataset.yaml` | catalog |
 | CDC | `wonder.ipynb` | WONDER API | `data/wonder/alcohol_D*.json` | **observations** |
 | Voteview | `downloads.ipynb` → `fetch.py` | `voteview.com` static files | `notebooks/voteview/data/*.csv` | **observations** |
+| Clio-Infra | `downloads.ipynb` → `fetch.py` | `clio-infra.eu` index, workbooks, indicator pages | `notebooks/clio/data/raw/*.xlsx`, `pages/*.html` | **observations** (not yet stored) |
 | Tiingo | — none — | — | — | — |
 
 Three things this corrects, all of which were believed otherwise:

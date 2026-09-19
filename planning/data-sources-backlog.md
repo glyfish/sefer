@@ -383,7 +383,7 @@ between the party medians per Congress). Straightforward, but not a plain load.
 
 ## 9. Clio-Infra — historical economic & well-being data
 
-> **Status: downloaded and surveyed, not yet built.** All 86 indicators
+> **Status: built and loaded** (11,042 series). All 86 indicators
 > (11,044 country series, 902,291 observations, 1500–2018) are on disk and
 > measured. Licence **CC0-1.0**, which settles the question below. Four things
 > the evaluation did not anticipate: DataverseNL holds a newer version 1.1

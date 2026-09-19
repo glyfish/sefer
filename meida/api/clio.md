@@ -2,8 +2,9 @@
 
 Reference for **Clio-Infra** (`clio-infra.eu`, IISH / Utrecht), the cliometrics
 collection of country-level indicators reaching back to 1500. Status:
-**downloaded and surveyed, not yet built** — the raw workbooks are on disk and
-measured; nothing is stored in Postgres or served over MCP.
+**built and loaded** — 11,042 stored series in `time_series_source` and 11,042
+rows in `series_catalog`, served by the generic stored-series tools with no
+Clio-specific server code.
 
 ## What is there
 
@@ -92,6 +93,50 @@ produce rows. Treating them alike overstates how much was measured.
 
 The apparent depth before 1700 is almost entirely the third kind.
 
+## Series and catalog
+
+One stored series per indicator per country:
+`clio/<indicator>/<country>`, e.g. `clio/gdp_per_capita/united_kingdom`. Both
+slugs come from display names — the page slugs split badly
+(`GDPperCapita` → `gdpper_capita`) — and all 86 indicator and 202 country slugs
+are unique. **11,042 series, 902,287 observations.**
+
+| | |
+| --- | --- |
+| Values | kept as the workbook wrote them (`16.62734117`, `9.307143E-5`) — a string in the storage contract |
+| Frequency | the indicator's usual step: `Annual` (50), `Decadal` (33), `Every 20/50 years` (3) |
+| TTL | 365 days, shared — one publication feeds every series, and it is scriptable |
+| Units | from `notebooks/clio/units.yaml`, committed; see below |
+| Catalog | one file per category, `clio_series_<category>.yaml` — eleven |
+| Facets | `indicator`, `country`, `category`, `kind`, and `ccode` where there is one |
+| Description | Clio's own definition from the indicator page — 80 distinct |
+
+**Which country a row belongs to.** By its code. A blank code takes the code
+its name carries elsewhere; the eight never-coded territories are keyed by
+name. Where a recovered row lands on a year its country's coded series already
+has, the coded row wins and the clash is reported. Four clashes, all real
+wages: Canada 1946–47, whose uncoded values are the United States' numbers, and
+Morocco 1956–57, exact duplicates. That is why the build has 2 fewer series and
+4 fewer observations than the survey counted.
+
+**`kind` travels with every series** — `measured`, `panel` or `reconstruction`
+— so a catalog search can leave out rows that were never measured
+(`facets={"kind": "measured"}`). The rule lives in one place,
+`inventory.kind()`.
+
+**Units are never inferred.** The workbooks state none. `units.harvest()` takes
+row 2 of each DataverseNL deposit filed under `notebooks/clio_historical` and
+records it with its DOI and version, so units arrive as deposits are filed.
+One so far — Labourers Real Wage, 133 series. The rest are `null` until a
+deposit or a person supplies one.
+
+**Loading needed batching.** One INSERT binds at most 65,535 parameters; at
+about fourteen per row, 11,042 series do not fit, and neither did the catalog
+prune's `NOT IN`. Both loaders now write in batches of 1,000 inside one
+transaction. And `timeseries_source_list` gained a cap — see
+[time-series-source.md](../time-series-source.md) — because uncapped it
+returned 3.3 MB, some 827,000 tokens, to a model.
+
 ## Gotchas
 
 - **Blank country codes are real countries.** 861 rows carry a name and no
@@ -125,8 +170,12 @@ All under `notebooks/clio/`; `data/` is gitignored.
 | --- | --- |
 | `utils/fetch.py` | index and page parsers, `fetch_all()` |
 | `utils/xlsx.py` | stdlib worksheet reader, sheets by name |
-| `utils/inventory.py` | measures every workbook → `data/inventory.json` |
-| `downloads.ipynb` | runs the fetch and the inventory; documents outputs |
+| `utils/inventory.py` | measures every workbook → `data/inventory.json`; `kind()` |
+| `utils/clio_series.py` | one series per indicator per country |
+| `utils/catalog.py` | `export()` → `timeseries/clio.jsonl` and eleven catalog files |
+| `utils/units.py` | `harvest()` units from filed DataverseNL deposits |
+| `units.yaml` | committed — each unit with where it came from |
+| `downloads.ipynb` | fetch → inventory → units → build → load; documents outputs |
 | `inventory.ipynb` | the survey |
 | `data/raw/*.xlsx` | 87 workbooks, ~36 MB |
 | `data/pages/*.html` | 86 indicator pages |

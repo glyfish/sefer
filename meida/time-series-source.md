@@ -2,7 +2,7 @@
 
 > **Status: built** (2026-09-07). Migrations `0d2b2b6d7904` and `8f31c0a4e7d2`
 > are applied, the client is `mcp_server/timeseries_source.py`, and three MCP
-> tools serve it. 188 series are loaded — 171 NVSR, 9 WONDER, 8 Voteview.
+> tools serve it. 11,230 series are loaded — 11,042 Clio-Infra, 171 NVSR, 9 WONDER, 8 Voteview.
 
 meida's own PostgreSQL database. It holds observations for sources that **cannot
 be fetched per request**, and exposes them over MCP so consumers reach them
@@ -111,7 +111,7 @@ and `value` alone.
 **CDC Socrata.** It has a working API, so its 2,346 series are catalog-only and
 are fetched live through the `cdc_series_data` MCP tool. Only sources without a
 usable API are stored. Those Socrata series *are* discoverable, though — they sit
-in [`series_catalog`](series-catalog.md) alongside the 188 stored ones, which is
+in [`series_catalog`](series-catalog.md) alongside the 11,230 stored ones, which is
 what lets a single listing span both routes.
 
 ## Migrations
@@ -194,9 +194,9 @@ document store rather than here.
 
 | Tool | Returns | Notes |
 | --- | --- | --- |
-| `timeseries_source_list` | `TimeSeriesRefList` | Identity and coverage, no observations. Optional `source` filter. |
+| `timeseries_source_list` | `TimeSeriesRefList` | Identity and coverage, no observations. `source` and native_id `prefix` filters; capped at `limit` (default 200, most 1,000) with `total`, `returned` and a per-source count. |
 | `timeseries_source_data` | `TimeSeriesRecord` | One series in full. `frequency` only needed to disambiguate. |
-| `timeseries_source_stale` | `TimeSeriesRefList` | Series past `expires_at` — due for a refresh, still served. |
+| `timeseries_source_stale` | `TimeSeriesRefList` | Series past `expires_at` — due for a refresh, still served. Capped the same way. |
 
 They share a `_call_timeseries_source` helper, which owns client lifecycle and
 wraps a returned list in `TimeSeriesRefList`.

@@ -87,6 +87,50 @@ sources on four tiers — central statistical agencies, historical
 reconstructions, estimates, conjectures — and says real wages are estimates
 before the 1920s and reconstructions after.
 
+## The working papers — `data/documentation.yaml`
+
+Each zip download carries a `.docx` working paper in a fixed template, and it
+is the best metadata any Clio source has: title, authors, dates, the unit, an
+abstract, keywords, methodology with per-country caveats, data quality, sources,
+and often the full paper. `utils.documentation.build()` extracts every paper
+under `data/raw/` into one YAML file, keyed by indicator id like
+`notebooks/clio/units.yaml`. **52 papers**, one per indicator.
+
+It lives in `data/`, gitignored and regenerable from the papers — but those were
+downloaded by hand, so losing `data/raw/` means downloading them again.
+
+What reading all of them turned up:
+
+- **The paper's "Version" is not DataverseNL's.** Section 4 reads `1st version`,
+  `1`, `Version 1.0`, `2nd version`, `2` — the authors' revision of the dataset.
+  DataverseNL's deposit version (1.1) is in none of the files. Kept as
+  `paper_version`, normalised to `version_number`; it is what changes when the
+  data itself is revised.
+- **"Unit of analysis" means two things.** 19 papers write *Country* — what is
+  observed — and the rest write the unit (*deaths per 100,000 inhabitants*,
+  *number of years*, *percentage*). Four split section 7 into 7a (analysis,
+  always *Country*) and 7b (measurement). The derived `unit` takes 7b, else a
+  unit of analysis that is not *Country*, and says which in `unit_source`: 34
+  papers state a unit, 18 do not.
+- **"Data quality" is often just the template's menu** — the four grades listed
+  with no sentence saying which applies. Where a sentence follows, it is the
+  assessment.
+- **Section 17, "Text", is the full paper** — 37 have one, up to 64,000
+  characters — and its own chapters are numbered. So a numbered paragraph is a
+  section only when its name is a template heading; otherwise it is body text.
+- **One deposit carries two editions.** GDP per capita has the 2013 Maddison
+  update and the 2020 "long view", version 2, which runs to 2016 as the main site
+  does. The latest edition is the entry, the older kept under `superseded`.
+- **Three workbooks mistitle their indicator** — `Unifid Democracy Scores`,
+  `Composite Wellbeing Index`, `Social Transfers` — each checked against the
+  paper beside it and recorded in `WORKBOOK_ALIASES`.
+
+### Three workbook layouts
+
+Found by the header row, `Webmapper code`, and whatever sits above it: title and
+unit (68 workbooks), title only on a sheet called `Sheet1` (10), or nothing (1).
+Where there is no title, the paper's own names the indicator.
+
 ## What it adds over the main site — Labourers Real Wage
 
 Every one of the 7,542 values compared against the main site's copy:
@@ -133,10 +177,11 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 | `utils/accept.py` | files a hand-downloaded folder, finds its DOI from the title, records version |
 | `utils/datasets.py` | every indicator's DataverseNL DOI, from the Handle redirect |
 | `utils/workbook.py` | reads the `Data` sheet into polity-periods |
-| `utils/documentation.py` | reads the `.docx` into its numbered sections |
+| `utils/documentation.py` | the `.docx` into named fields; `build()` → `data/documentation.yaml` |
 | `utils/xlsx.py` | stdlib reader, copied from `notebooks/clio` |
 | `notebooks/downloads.ipynb` | the checklist: 86 datasets, links, what is filed |
 | `notebooks/explore.ipynb` | the look: layout, the comparison, Germany by border period |
 | `data/raw/<doi>/` | one deposit per DOI |
 | `data/datasets.json` | indicator → handle → DOI → dataset page |
-| `data/manifest.json` | DOI, title, version, release and download dates, sha256 |
+| `data/manifest.json` | DOI, title, version, release and download dates, sha256 — for folders filed by `accept()` |
+| `data/documentation.yaml` | every working paper as named fields, keyed by indicator |

@@ -62,6 +62,13 @@ history renders only in a browser. Whether 1.1 changed the data or only
 metadata is **not yet known**; every dataset getting 1.1 on the same day looks
 like a platform-wide re-release. The main-site files are what is built from.
 
+**Since examined, for one indicator** — see
+[clio_historical.md](clio_historical.md). The DataverseNL file is not a newer
+copy but a different geography: one row per historical border period, with the
+main site's series as a subset. It adds the unit, a data-quality grading, 191
+values, and historical states under their own names; its pre-1948 Canada rows
+are mislabelled US data. It is a separate source, filed by hand.
+
 The main site also offers `DataAtHistoricalBorders.xlsx` — 320 rows keyed by
 country, border period and indicator. Downloaded, not yet examined.
 

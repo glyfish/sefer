@@ -106,7 +106,7 @@ are unique. **11,042 series, 902,287 observations.**
 | Values | kept as the workbook wrote them (`16.62734117`, `9.307143E-5`) — a string in the storage contract |
 | Frequency | the indicator's usual step: `Annual` (50), `Decadal` (33), `Every 20/50 years` (3) |
 | TTL | 365 days, shared — one publication feeds every series, and it is scriptable |
-| Units | from `notebooks/clio/units.yaml`, committed; see below |
+| Units | from `data/units.yaml`, built from the DataverseNL deposits; see below |
 | Catalog | one file per category, `clio_series_<category>.yaml` — eleven |
 | Facets | `indicator`, `country`, `category`, `kind`, and `ccode` where there is one |
 | Description | Clio's own definition from the indicator page — 80 distinct |
@@ -124,11 +124,16 @@ Morocco 1956–57, exact duplicates. That is why the build has 2 fewer series an
 (`facets={"kind": "measured"}`). The rule lives in one place,
 `inventory.kind()`.
 
-**Units are never inferred.** The workbooks state none. `units.harvest()` takes
-row 2 of each DataverseNL deposit filed under `notebooks/clio_historical` and
-records it with its DOI and version, so units arrive as deposits are filed.
-One so far — Labourers Real Wage, 133 series. The rest are `null` until a
-deposit or a person supplies one.
+**Units are never inferred.** The main-site workbooks state none, so they come
+from the DataverseNL deposits filed under `notebooks/clio_historical`, whose
+`documentation.build()` records each indicator's workbook row 2 and its working
+paper's unit. `units.harvest()` reads that one file into `data/units.yaml` —
+generated and gitignored, like the rest of the build — preferring **row 2**,
+falling back to the paper. Where both exist they agree word for word on 2 of 30,
+and row 2 is usually the better label ("scale from 1 (unlimited authority) to
+7" where the paper says "dimensionless, multi-nominal scale"); both are kept.
+69 of the 76 filed indicators have one, and **8,820 of the 11,042 series**.
+Indicators not yet filed stay unit-less.
 
 **Loading needed batching.** One INSERT binds at most 65,535 parameters; at
 about fourteen per row, 11,042 series do not fit, and neither did the catalog
@@ -178,8 +183,7 @@ All under `notebooks/clio/`; `data/` is gitignored.
 | `utils/inventory.py` | measures every workbook → `data/inventory.json`; `kind()` |
 | `utils/clio_series.py` | one series per indicator per country |
 | `utils/catalog.py` | `export()` → `timeseries/clio.jsonl` and eleven catalog files |
-| `utils/units.py` | `harvest()` units from filed DataverseNL deposits |
-| `units.yaml` | committed — each unit with where it came from |
+| `utils/units.py` | `harvest()` → `data/units.yaml`, from `clio_historical`'s documentation |
 | `downloads.ipynb` | fetch → inventory → units → build → load; documents outputs |
 | `inventory.ipynb` | the survey |
 | `data/raw/*.xlsx` | 87 workbooks, ~36 MB |

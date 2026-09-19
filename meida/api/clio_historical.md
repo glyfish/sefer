@@ -93,8 +93,12 @@ Each zip download carries a `.docx` working paper in a fixed template, and it
 is the best metadata any Clio source has: title, authors, dates, the unit, an
 abstract, keywords, methodology with per-country caveats, data quality, sources,
 and often the full paper. `utils.documentation.build()` extracts every paper
-under `data/raw/` into one YAML file, keyed by indicator id like
-`notebooks/clio/units.yaml`. **52 papers**, one per indicator.
+under `data/raw/` into one YAML file, keyed by the Clio series' indicator ids.
+**Every filed indicator has an entry — 76 —** 52 with a paper and 24 from a
+single-file download, which have no paper but still carry the workbook's
+identity and its row-2 unit (`workbook_unit`), unless row 2 merely repeats the
+indicator's name. `notebooks/clio`'s unit harvest reads this file and nothing
+else.
 
 It lives in `data/`, gitignored and regenerable from the papers — but those were
 downloaded by hand, so losing `data/raw/` means downloading them again.
@@ -121,9 +125,11 @@ What reading all of them turned up:
 - **One deposit carries two editions.** GDP per capita has the 2013 Maddison
   update and the 2020 "long view", version 2, which runs to 2016 as the main site
   does. The latest edition is the entry, the older kept under `superseded`.
-- **Three workbooks mistitle their indicator** — `Unifid Democracy Scores`,
-  `Composite Wellbeing Index`, `Social Transfers` — each checked against the
-  paper beside it and recorded in `WORKBOOK_ALIASES`.
+- **Six workbooks mistitle their indicator.** Three checked against the paper
+  beside them — `Unifid Democracy Scores`, `Composite Wellbeing Index`,
+  `Social Transfers` — and three with no paper whose abbreviations are exact:
+  `…Cost of Basic Needs` (CBN), `…Dollar a Day` (DAD), `Wealth Top 10 percent
+  share`. All in `WORKBOOK_ALIASES`.
 
 ### Three workbook layouts
 

@@ -278,10 +278,10 @@ also makes it a RAG candidate rather than a numeric one.
 > | NVSR national | 18 | 2018–2024 | stored; xlsx pulled from FTP by hand |
 > | NVSR state | 153 | 2018–2022 | stored; 51 jurisdictions × 3 sexes |
 >
-> Two tables carry it. **`series_catalog`** (2,682 rows, every one with an
+> Two tables carry it. **`series_catalog`** (2,526 CDC rows, every one with an
 > LLM-written description) is discovery — what exists, which facets pick it
 > out, and a `retrieval` block naming the tool that fetches it. That block is
-> what lets one listing serve both routes. **`time_series_source`** (188
+> what lets one listing serve both routes. **`time_series_source`** (180 CDC
 > series, 1,119 observations) holds observations only for the file-delivered
 > sources, and stands in for the API endpoint they do not have; its TTL means
 > "due for a refresh", not "too old to serve". Socrata is deliberately absent
@@ -330,8 +330,33 @@ needs its own field mapping. Provisional series get revised.
 
 ## 8. Voteview — Congressional roll-call ideology
 
+> **Status: done.** Eight stored series — four measures × two chambers,
+> biennial, one observation per Congress — reduced offline from the
+> DW-NOMINATE member panel and served by the same `timeseries_source_*` tools
+> as WONDER and NVSR. It needed **no server code**: no client module, no tool,
+> no `source`-specific branch, which is what it was built to test. See the
+> [Voteview reference](../meida/api/voteview.md).
+>
+> | measure | span | what it is |
+> | --- | --- | --- |
+> | `party_predicts_position` | 1789–2025 | party-median distance ÷ within-party spread |
+> | `effective_parties` | 1789–2025 | Laakso–Taagepera effective number of parties |
+> | `median_gap` | 1857–2025 | Democratic–Republican median distance on `dim1` |
+> | `moderate_bloc` | 1857–2025 | members inside the other party's range |
+>
+> Two design choices worth keeping. A **representation gate** withholds the
+> party-agnostic measures where the second party holds under 25% of a chamber
+> (House loses 9 Congresses, Senate 15) rather than compare a real median
+> against a rump. And a **30-day TTL** shared by all eight, because they reduce
+> from one 6 MB download and staggering them would mean eight fetches of the
+> same file.
+>
+> Notebooks: `downloads`, `mcp`, `walkthrough`, `client`, `nominate`.
+>
+> **No open items.**
+
 **Access (verified).** Direct CSV/JSON download, no auth
-(`voteview.com/static/data/out/...`). `HSall_members.csv` is 6.2 MB, **51,063
+(`voteview.com/static/data/out/...`). `HSall_members.csv` is 6.2 MB, **51,064
 member-Congress rows** with `nominate_dim1`/`dim2` (DW-NOMINATE) plus party and
 biographical fields. A ~500 MB MongoDB dump is offered for full programmatic use.
 
@@ -456,9 +481,10 @@ the sequence below is the working roadmap.
 1. **CDC** — health leg (deaths of despair, life expectancy). *(easy)* —
    **✅ done** (§7), and larger than scoped: Socrata turned out to be one of
    three routes, with WONDER and NVSR needing a stored-series table because
-   neither has an API to call. **Voteview is now the front of the queue.**
+   neither has an API to call.
 2. **Voteview** — cheap half of elite cohesion (DW-NOMINATE overlap, bipartisan
-   fraction). CSV, no auth, + a reduction pass. *(easy)*
+   fraction). CSV, no auth, + a reduction pass. *(easy)* — **✅ done** (§8).
+   **Clio-Infra is now the front of the queue.**
 3. **Clio-Infra** — historical backbone (real wages, inequality, life expectancy,
    ~1500→). Excel loader, no API. *(easy)*
 4. **Polymarket** — **research first**: understand how its markets/prices work and

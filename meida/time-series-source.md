@@ -273,7 +273,11 @@ NVSR registrations. Step 5 puts them back, giving 2,526 over 8.
 
 **Step 6 before step 8.** The export writes group files with no `description`,
 and the loader takes the YAML as authoritative. Skipping the description merge
-blanks the column for all 2,526 rows, and nothing complains.
+used to blank the column for all 2,526 rows with nothing complaining — and on
+2026-09-13 it did exactly that, during an unrelated reload. `load_catalog.load`
+now refuses: it compares the export against what is stored and raises
+`DescriptionLossError` naming the count and the merge command, writing nothing.
+`allow_description_loss=True` exists for a deliberate clear.
 
 `descriptions.generate` is the expensive one — roughly 37 `claude-opus-5` calls
 at `max_tokens=16000`, i.e. real money. `apply_to_catalog` only merges the

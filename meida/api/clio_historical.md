@@ -1,13 +1,34 @@
 # Clio-Infra at Historical Borders Reference — DataverseNL deposits
 
 Reference for the **DataverseNL** deposits of the Clio-Infra indicators — the
-same indicators as [clio.md](clio.md), with a different geography. Status: **one
-dataset filed and examined** (Labourers Real Wage, `doi:10.34894/UFVNXT`,
-version 1.1); nothing stored or served.
+same indicators as [clio.md](clio.md), with a different geography. Status:
+**built and loaded** — 395 stored series, served by the stored-series tools like
+every other stored source.
 
 A separate source from `clio` because it differs in the two ways that matter
 for managing it: its unit of geography (border periods, not modern states), and
 how it is obtained (by hand, not by script).
+
+**Mostly, it is the main site's data relabelled.** Every deposit's workbook
+lists the same ~1,412 GeaCron border periods, but in all except five indicators
+those rows are empty; the deposit's data is its CShapes rows, which *are* the
+main site's series, already stored as `clio`. What is stored here is the rest —
+one polity within one border period, from exchange rates to the pound (179),
+days lost in labour disputes (117), real wages (98) and one GDP row. Compared
+value by value with the main site:
+
+| relation | series | |
+| --- | --- | --- |
+| `same` | 352 | the same country carries every value |
+| `successor` | 38 | filed there under a modern state — Ottoman under Turkey, Prussia under Germany |
+| `differs` | 1 | the Netherlands 1820–39, which includes Belgium: exactly ⅔ + ⅓ |
+| `new` | 4 | Hong Kong (two), the Falklands, Yugoslavia |
+
+So its real value is the **border label** — that the 1850 value is the German
+Confederation's — and, more than the data, the **working papers**, whose units
+and documentation now feed `clio`. The comparison needs a relative tolerance:
+the main site keeps seven significant figures (`14.44252`), DataverseNL full
+precision (`14.4425187753`); an absolute 1e-6 once called 70 series "new".
 
 ## Access — by hand only
 
@@ -167,12 +188,19 @@ Every one of the 7,542 values compared against the main site's copy:
 An earlier reading reported (3) as "version 1.1 revised Canada by up to +78%".
 It compared by name, and the historical Canada rows hold another country.
 
-## Open before building series
+## Series and catalog
 
-- **Which border scheme a stored series follows.** The CShapes rows duplicate
-  the main site; the GeaCron periods are the new information but fragment one
-  country into several series.
-- **What to do with wrong rows**, starting with pre-1948 Canada.
+`clio_historical/<indicator>/<polity>_<start>_<end>`, e.g.
+`clio_historical/labourers_real_wage/german_confederation_1820_1839`: only the
+values inside the border period, since outside it a row repeats the CShapes
+row. Facets add `polity`, `border_start`, `border_end`, `relation` and — where
+the main site carries the numbers — `modern_country`. Units from the
+documentation (row 2, else the paper); TTL ten years, since refresh is by hand.
+
+**Excluded:** Canada's real-wage rows for 1925–1945 (`geacron/236`–`239`),
+which hold the United States' numbers digit for digit — `EXCLUDED` in
+`historical_series.py`, with the reason. Every other cross-country match is a
+predecessor and its successor.
 
 ## Files
 
@@ -185,7 +213,11 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 | `utils/workbook.py` | reads the `Data` sheet into polity-periods |
 | `utils/documentation.py` | the `.docx` into named fields; `build()` → `data/documentation.yaml` |
 | `utils/xlsx.py` | stdlib reader, copied from `notebooks/clio` |
+| `utils/historical_series.py` | one series per polity per border period; `relate()`, `EXCLUDED` |
+| `utils/catalog.py` | `export()` → `timeseries/clio_historical.jsonl` and the catalog |
 | `notebooks/downloads.ipynb` | the checklist: 86 datasets, links, what is filed |
+| `notebooks/client.ipynb` | the two database clients, no server; the Netherlands kingdom |
+| `notebooks/mcp.ipynb` | over SSE: new series, a polity through its borders, successors |
 | `notebooks/explore.ipynb` | the look: layout, the comparison, Germany by border period |
 | `data/raw/<doi>/` | one deposit per DOI |
 | `data/datasets.json` | indicator → handle → DOI → dataset page |

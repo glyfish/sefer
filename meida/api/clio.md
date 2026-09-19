@@ -185,6 +185,8 @@ All under `notebooks/clio/`; `data/` is gitignored.
 | `utils/catalog.py` | `export()` → `timeseries/clio.jsonl` and eleven catalog files |
 | `utils/units.py` | `harvest()` → `data/units.yaml`, from `clio_historical`'s documentation |
 | `downloads.ipynb` | fetch → inventory → units → build → load; documents outputs |
+| `client.ipynb` | the two database clients, no server |
+| `mcp.ipynb` | over SSE: catalog → ids → describe → data, and filtering by `kind` |
 | `inventory.ipynb` | the survey |
 | `data/raw/*.xlsx` | 87 workbooks, ~36 MB |
 | `data/pages/*.html` | 86 indicator pages |

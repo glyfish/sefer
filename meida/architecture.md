@@ -618,7 +618,7 @@ which keeps the tool's accepted vocabulary and the catalog's `facets` metadata
 keys identical by construction. `catalog_timeseries.py` does the same for the
 two file-delivered sources, `descriptions.py` adds LLM-generated prose for the
 document store, and `load_catalog.py` / `load_timeseries.py` put the results in
-Postgres — the 2,346 Socrata entries plus 11,230 stored ones are the 13,576 rows
+Postgres — the 2,346 Socrata entries plus 11,625 stored ones are the 13,971 rows
 `series_catalog` holds. See [api/cdc.md](api/cdc.md) and
 [api/wonder-nvsr.md](api/wonder-nvsr.md).
 
@@ -637,8 +637,8 @@ annual life tables as Excel workbooks on an FTP tree with no programmatic year �
 volume mapping. Their observations are pulled once and stored here, so this
 table is **not a cache — it is the source of truth** for these series. Read by
 `TimeSeriesSourceClient`, served by `timeseries_source_list`,
-`timeseries_source_data` and `timeseries_source_stale`. It currently holds 11,230
-series: 11,042 Clio-Infra, 171 NVSR, 9 WONDER, 8 Voteview. Voteview is the source that tested
+`timeseries_source_data` and `timeseries_source_stale`. It currently holds 11,625
+series: 11,042 Clio-Infra, 395 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview. Voteview is the source that tested
 whether this path generalizes — it needed no server code at all, no client
 module and no `source`-specific branch. See [api/voteview.md](api/voteview.md).
 
@@ -666,8 +666,8 @@ knew their facets, and the catalog YAML that knows they exist is gitignored
 build output that no runtime code reads.
 
 Each row carries a **`retrieval` block naming its fetch tool**, which is what
-lets one listing span both routes. Of the 13,576 rows today, 2,346 point at
-`cdc_series_data` (live Socrata) and 11,230 at `timeseries_source_data` (stored);
+lets one listing span both routes. Of the 13,971 rows today, 2,346 point at
+`cdc_series_data` (live Socrata) and 11,625 at `timeseries_source_data` (stored);
 none lacks a route since the state-level life-expectancy snapshots were deleted. A row's `facets` keys are exactly the arguments
 `cdc_series_data` takes, so a value read off a discovered series passes straight
 back in.

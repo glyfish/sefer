@@ -2,7 +2,7 @@
 
 > **Status: built** (2026-09-07). Migrations `0d2b2b6d7904` and `8f31c0a4e7d2`
 > are applied, the client is `mcp_server/timeseries_source.py`, and three MCP
-> tools serve it. 11,230 series are loaded — 11,042 Clio-Infra, 171 NVSR, 9 WONDER, 8 Voteview.
+> tools serve it. 11,625 series are loaded — 11,042 Clio-Infra, 395 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview.
 
 meida's own PostgreSQL database. It holds observations for sources that **cannot
 be fetched per request**, and exposes them over MCP so consumers reach them
@@ -111,7 +111,7 @@ and `value` alone.
 **CDC Socrata.** It has a working API, so its 2,346 series are catalog-only and
 are fetched live through the `cdc_series_data` MCP tool. Only sources without a
 usable API are stored. Those Socrata series *are* discoverable, though — they sit
-in [`series_catalog`](series-catalog.md) alongside the 11,230 stored ones, which is
+in [`series_catalog`](series-catalog.md) alongside the 11,625 stored ones, which is
 what lets a single listing span both routes.
 
 ## Migrations

@@ -215,11 +215,14 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 | `utils/xlsx.py` | stdlib reader, copied from `notebooks/clio` |
 | `utils/historical_series.py` | one series per polity per border period; `relate()`, `EXCLUDED` |
 | `utils/catalog.py` | `export()` → `timeseries/clio_historical.jsonl` and the catalog |
+| `utils/inventory.py` | measures every deposit by border scheme and what its paper gives; `build()` → `data/inventory.json` |
 | `notebooks/downloads.ipynb` | the checklist: 86 datasets, links, what is filed |
 | `notebooks/client.ipynb` | the two database clients, no server; the Netherlands kingdom |
 | `notebooks/mcp.ipynb` | over SSE: new series, a polity through its borders, successors |
 | `notebooks/explore.ipynb` | the look: layout, the comparison, Germany by border period |
+| `notebooks/inventory.ipynb` | what is there: filed, layouts, GeaCron against CShapes by decade, the papers |
 | `data/raw/<doi>/` | one deposit per DOI |
 | `data/datasets.json` | indicator → handle → DOI → dataset page |
 | `data/manifest.json` | DOI, title, version, release and download dates, sha256 — for folders filed by `accept()` |
 | `data/documentation.yaml` | every working paper as named fields, keyed by indicator |
+| `data/inventory.json` | per indicator: layout, both schemes' rows and decades, the paper's contents, stored relations |

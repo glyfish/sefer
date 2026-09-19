@@ -188,7 +188,7 @@ default suite hermetic.
 | Tool | Returns | Notes |
 | --- | --- | --- |
 | `series_catalog_concepts` | `CatalogConceptList` | The coarse map: concept × dataset with a series count. Start here. |
-| `series_catalog_search` | `CatalogSearchResult` | Exact filters — `dataset_id`, `concept`, `facets`. No `active_only`: see `is_active` above. |
+| `series_catalog_search` | `CatalogSearchResult` | Exact filters — `source`, `dataset_id`, `concept`, `facets`, and `timeseries_source` (the stored source in `retrieval`). The only way to enumerate stored series. No `active_only`: see `is_active` above. |
 | `series_catalog_entry` | `CatalogEntry` | One entry by `series_id`. |
 
 `series_catalog_concepts` reports a concept **once per dataset**, not once

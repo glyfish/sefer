@@ -133,9 +133,14 @@ deposit or a person supplies one.
 **Loading needed batching.** One INSERT binds at most 65,535 parameters; at
 about fourteen per row, 11,042 series do not fit, and neither did the catalog
 prune's `NOT IN`. Both loaders now write in batches of 1,000 inside one
-transaction. And `timeseries_source_list` gained a cap — see
-[time-series-source.md](../time-series-source.md) — because uncapped it
-returned 3.3 MB, some 827,000 tokens, to a model.
+transaction.
+
+**And the stored-series tools stopped enumerating.** Uncapped,
+`timeseries_source_list(source='clio')` returned 3.3 MB — and its description
+told a model to call it with no arguments to see what existed. It now requires
+`native_ids`; finding series is `series_catalog_search`'s job, with a
+`timeseries_source` filter for listing one stored source. See
+[time-series-source.md](../time-series-source.md#finding-a-series).
 
 ## Gotchas
 

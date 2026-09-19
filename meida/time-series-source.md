@@ -194,9 +194,30 @@ document store rather than here.
 
 | Tool | Returns | Notes |
 | --- | --- | --- |
-| `timeseries_source_list` | `TimeSeriesRefList` | Identity and coverage, no observations. `source` and native_id `prefix` filters; capped at `limit` (default 200, most 1,000) with `total`, `returned` and a per-source count. |
+| `timeseries_source_list` | `TimeSeriesRefList` | Identity, coverage and staleness for **1–200 `native_ids`** — it never enumerates. `missing` names ids not stored. |
 | `timeseries_source_data` | `TimeSeriesRecord` | One series in full. `frequency` only needed to disambiguate. |
-| `timeseries_source_stale` | `TimeSeriesRefList` | Series past `expires_at` — due for a refresh, still served. Capped the same way. |
+| `timeseries_source_stale` | `TimeSeriesRefList` | Series past `expires_at` — due for a refresh, still served. **Requires a `source`**; capped at `limit` (default 200) with `total`. |
+
+### Finding a series
+
+**The stored-series tools take ids; they never enumerate.** Finding series is
+`series_catalog_search`'s job — capped at 200, reporting `total`, filterable by
+concept and facets — and each entry's `retrieval` block carries the `source`
+and `native_id` these tools take. To list one stored source, filter the catalog
+by `timeseries_source` (`cdc_nvsr`, `cdc_wonder`, `voteview`, `clio`): the
+catalog files NVSR under the publisher `cdc`, so its `source` filter alone
+would mix in live Socrata series.
+
+This was not always so. `timeseries_source_list` once listed everything, with a
+description telling a model to call it with no arguments "to see which sources
+exist". At 188 series that was harmless. Clio-Infra made it 11,230, and
+`source='clio'` alone 3.3 MB. A host truncating that result would hand the model
+a partial list with nothing saying it was partial. The ids-only contract is
+enforced in the tool's input schema (`native_ids`, 1–200 items), so the call
+fails validation rather than returning a flood.
+
+The Python client keeps `list_series()`, unbounded, for code; `describe()` is
+what the tool serves.
 
 They share a `_call_timeseries_source` helper, which owns client lifecycle and
 wraps a returned list in `TimeSeriesRefList`.

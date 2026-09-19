@@ -24,6 +24,28 @@ So datasets are downloaded in a browser and filed with
 version**, the release date, the download date (the folder's own mtime, so
 filing late does not misdate it), and a sha256 per file.
 
+**Knowing what to download needs no access at all.** Every main-site workbook
+cites its indicator by Handle (`10622/…`, IISH's prefix), and the Handle
+resolver redirects to the DataverseNL DOI. The resolver is not behind the bot
+check and only its `Location` header is read, so `utils.datasets.build()` lists
+all 86 datasets — 86 distinct DOIs, all `10.34894/…` — in about 75 seconds
+without a single request reaching DataverseNL. Three of the mappings were
+checked against DataverseNL's own page titles. `notebooks/downloads.ipynb`
+turns that into a checklist with a link per dataset, ticking off what is filed,
+in three groups:
+
+| group | datasets | why |
+| --- | --- | --- |
+| first | 44 | measured, with data before 1946 — where historical borders change the story |
+| later | 38 | zero-filled panels and model reconstructions — the unit and paper, little else |
+| last | 4 | start after 1946 — CShapes reproduces the main site; unit and paper only |
+
+`accept()` then needs only `version=`: it reads the DOI from the workbook's
+title row, collapsing whitespace and case (15 of 86 names carry doubled
+spaces), and refuses a `doi=` that contradicts the title rather than filing the
+wrong folder. Title matching is verified for one deposit; a title that matches
+nothing raises and asks for the DOI.
+
 If programmatic access is ever wanted, DANS (who run DataverseNL) issue API
 tokens to registered users; asking for access to CC0 data is an ordinary
 request.
@@ -108,10 +130,13 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 
 | Path | What |
 | --- | --- |
-| `utils/accept.py` | files a hand-downloaded folder, records DOI and version |
+| `utils/accept.py` | files a hand-downloaded folder, finds its DOI from the title, records version |
+| `utils/datasets.py` | every indicator's DataverseNL DOI, from the Handle redirect |
 | `utils/workbook.py` | reads the `Data` sheet into polity-periods |
 | `utils/documentation.py` | reads the `.docx` into its numbered sections |
 | `utils/xlsx.py` | stdlib reader, copied from `notebooks/clio` |
-| `explore.ipynb` | the look: layout, the comparison, Germany by border period |
+| `notebooks/downloads.ipynb` | the checklist: 86 datasets, links, what is filed |
+| `notebooks/explore.ipynb` | the look: layout, the comparison, Germany by border period |
 | `data/raw/<doi>/` | one deposit per DOI |
-| `data/manifest.json` | DOI, version, release and download dates, sha256 |
+| `data/datasets.json` | indicator → handle → DOI → dataset page |
+| `data/manifest.json` | DOI, title, version, release and download dates, sha256 |

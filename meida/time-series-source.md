@@ -2,7 +2,7 @@
 
 > **Status: built** (2026-09-07). Migrations `0d2b2b6d7904` and `8f31c0a4e7d2`
 > are applied, the client is `mcp_server/timeseries_source.py`, and three MCP
-> tools serve it. 11,625 series are loaded — 11,042 Clio-Infra, 395 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview.
+> tools serve it. 11,621 series are loaded — 11,042 Clio-Infra, 391 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview.
 
 meida's own PostgreSQL database. It holds observations for sources that **cannot
 be fetched per request**, and exposes them over MCP so consumers reach them
@@ -111,7 +111,7 @@ and `value` alone.
 **CDC Socrata.** It has a working API, so its 2,346 series are catalog-only and
 are fetched live through the `cdc_series_data` MCP tool. Only sources without a
 usable API are stored. Those Socrata series *are* discoverable, though — they sit
-in [`series_catalog`](series-catalog.md) alongside the 11,625 stored ones, which is
+in [`series_catalog`](series-catalog.md) alongside the 11,621 stored ones, which is
 what lets a single listing span both routes.
 
 ## Migrations
@@ -204,7 +204,8 @@ document store rather than here.
 `series_catalog_search`'s job — capped at 200, reporting `total`, filterable by
 concept and facets — and each entry's `retrieval` block carries the `source`
 and `native_id` these tools take. To list one stored source, filter the catalog
-by `timeseries_source` (`cdc_nvsr`, `cdc_wonder`, `voteview`, `clio`): the
+by `timeseries_source` (`cdc_nvsr`, `cdc_wonder`, `voteview`, `clio`,
+`clio_historical`): the
 catalog files NVSR under the publisher `cdc`, so its `source` filter alone
 would mix in live Socrata series.
 

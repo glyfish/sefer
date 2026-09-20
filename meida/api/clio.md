@@ -11,7 +11,7 @@ Clio-specific server code.
 | | |
 | --- | --- |
 | Indicators | 86, in 11 categories |
-| Country series | 11,044 — sixty times what meida stores today |
+| Country series | 11,044 — by far the largest source meida stores |
 | Observations | 902,291 |
 | Span | 1500–2018 |
 | US data | 85 of 86 indicators, but usually starting late (see below) |
@@ -129,10 +129,10 @@ from the DataverseNL deposits filed under `notebooks/clio_historical`, whose
 `documentation.build()` records each indicator's workbook row 2 and its working
 paper's unit. `units.harvest()` reads that one file into `data/units.yaml` —
 generated and gitignored, like the rest of the build — preferring **row 2**,
-falling back to the paper. Where both exist they agree word for word on 2 of 30,
+falling back to the paper. Where both exist they agree word for word on 2 of 31,
 and row 2 is usually the better label ("scale from 1 (unlimited authority) to
 7" where the paper says "dimensionless, multi-nominal scale"); both are kept.
-69 of the 76 filed indicators have one, and **8,820 of the 11,042 series**.
+75 of the 76 filed indicators have one, and **9,222 of the 11,042 series**.
 Indicators not yet filed stay unit-less.
 
 **Loading needed batching.** One INSERT binds at most 65,535 parameters; at
@@ -178,6 +178,7 @@ All under `notebooks/clio/`; `data/` is gitignored.
 
 | Path | What |
 | --- | --- |
+| `utils/__init__.py` | the MCP helpers the notebooks call, and the plotting helpers |
 | `utils/fetch.py` | index and page parsers, `fetch_all()` |
 | `utils/xlsx.py` | stdlib worksheet reader, sheets by name |
 | `utils/inventory.py` | measures every workbook → `data/inventory.json`; `kind()` |
@@ -192,7 +193,8 @@ All under `notebooks/clio/`; `data/` is gitignored.
 | `data/pages/*.html` | 86 indicator pages |
 | `data/downloads.json` | manifest: `Last-Modified`, sha256, badge, panels |
 
-A full fetch is 173 requests one second apart, about six minutes, and is
+A full fetch is 174 requests — the index, 87 workbooks, 86 pages — one second
+apart, about six minutes, and is
 idempotent — files on disk are skipped unless `refresh=True`.
 
 ## Citation

@@ -525,6 +525,7 @@ remember to read.
 | CDC | Hand-written registry of curated datasets → facet cross-product per dataset, plus the NVSR/WONDER downloads (§9) | `notebooks/cdc/data/` | 25 MB, 2,526 catalog entries |
 | Voteview | No catalog — a static-file download of the DW-NOMINATE panel | `notebooks/voteview/data/` | 6 MB, 51,064 member-Congress rows |
 | Clio-Infra | The index page pairs each of 86 indicators with its workbook and published span | `notebooks/clio/data/` | 36 MB, 11,044 country series |
+| Clio-Infra at historical borders | The same indicators deposited on DataverseNL, one row per polity per border period, downloaded by hand | `notebooks/clio_historical/data/` | 76 of 86 deposits filed, 391 stored series |
 
 ### Every writer, and where it writes
 
@@ -545,7 +546,7 @@ is gitignored.
 | CDC | `utils/catalog_timeseries.py` — `python -m` only | local | `data/cdc_series_{wonder,nvsr}.yaml`, merges `dataset.yaml` | catalog |
 | CDC | `wonder.ipynb` | WONDER API | `data/wonder/alcohol_D*.json` | **observations** |
 | Voteview | `downloads.ipynb` → `fetch.py` | `voteview.com` static files | `notebooks/voteview/data/*.csv` | **observations** |
-| Clio-Infra | `downloads.ipynb` → `fetch.py` | `clio-infra.eu` index, workbooks, indicator pages | `notebooks/clio/data/raw/*.xlsx`, `pages/*.html` | **observations** (not yet stored) |
+| Clio-Infra | `downloads.ipynb` → `fetch.py` | `clio-infra.eu` index, workbooks, indicator pages | `notebooks/clio/data/raw/*.xlsx`, `pages/*.html` | **observations** — 11,042 series stored |
 | Tiingo | — none — | — | — | — |
 
 Three things this corrects, all of which were believed otherwise:
@@ -618,7 +619,7 @@ which keeps the tool's accepted vocabulary and the catalog's `facets` metadata
 keys identical by construction. `catalog_timeseries.py` does the same for the
 two file-delivered sources, `descriptions.py` adds LLM-generated prose for the
 document store, and `load_catalog.py` / `load_timeseries.py` put the results in
-Postgres — the 2,346 Socrata entries plus 11,625 stored ones are the 13,971 rows
+Postgres — the 2,346 Socrata entries plus 11,621 stored ones are the 13,967 rows
 `series_catalog` holds. See [api/cdc.md](api/cdc.md) and
 [api/wonder-nvsr.md](api/wonder-nvsr.md).
 
@@ -637,8 +638,8 @@ annual life tables as Excel workbooks on an FTP tree with no programmatic year �
 volume mapping. Their observations are pulled once and stored here, so this
 table is **not a cache — it is the source of truth** for these series. Read by
 `TimeSeriesSourceClient`, served by `timeseries_source_list`,
-`timeseries_source_data` and `timeseries_source_stale`. It currently holds 11,625
-series: 11,042 Clio-Infra, 395 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview. Voteview is the source that tested
+`timeseries_source_data` and `timeseries_source_stale`. It currently holds 11,621
+series: 11,042 Clio-Infra, 391 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview. Voteview is the source that tested
 whether this path generalizes — it needed no server code at all, no client
 module and no `source`-specific branch. See [api/voteview.md](api/voteview.md).
 
@@ -666,8 +667,8 @@ knew their facets, and the catalog YAML that knows they exist is gitignored
 build output that no runtime code reads.
 
 Each row carries a **`retrieval` block naming its fetch tool**, which is what
-lets one listing span both routes. Of the 13,971 rows today, 2,346 point at
-`cdc_series_data` (live Socrata) and 11,625 at `timeseries_source_data` (stored);
+lets one listing span both routes. Of the 13,967 rows today, 2,346 point at
+`cdc_series_data` (live Socrata) and 11,621 at `timeseries_source_data` (stored);
 none lacks a route since the state-level life-expectancy snapshots were deleted. A row's `facets` keys are exactly the arguments
 `cdc_series_data` takes, so a value read off a discovered series passes straight
 back in.

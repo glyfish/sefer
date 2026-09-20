@@ -1,8 +1,9 @@
 # meida Series Catalog
 
 > **Status: built** (2026-09-07). Migration `8f31c0a4e7d2` is applied, the client
-> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 13,971 entries
-> are loaded, all under `source = "cdc"`.
+> is `mcp_server/series_catalog.py`, and three MCP tools serve it. 13,967 entries
+> are loaded under four sources: 11,042 Clio-Infra, 2,526 CDC, 391 Clio-Infra at
+> historical borders, 8 Voteview.
 
 The discovery half of meida's database.
 [`time_series_source`](time-series-source.md) answers *"give me this stored
@@ -20,7 +21,7 @@ Before this table, meida could enumerate exactly one of its two kinds of series.
 | | Stored series (WONDER, NVSR) | Socrata series |
 | --- | --- | --- |
 | Fetch | `timeseries_source_data` | `cdc_series_data` |
-| Enumerate | `timeseries_source_list` — 11,625 series, 200 per call | **nothing** |
+| Enumerate | `timeseries_source_list` — 11,621 series, 200 per call | **nothing** |
 
 The Socrata half was reachable *only if you already knew its facets*. You could
 ask for `chronic_liver_mortality` in Texas, age-adjusted — but only because you
@@ -54,12 +55,12 @@ a migration.
 | `series_id` | text | e.g. `cdc/alcohol_binge/hksd-2xuw/state=ak/race=aian/age_adjusted`. |
 | `dataset_id` | text, null | Provider dataset. Null for the stored (WONDER/NVSR) series. |
 | `concept` | text, null | What is measured — `alcohol_binge`, `suicide`, `life_expectancy`. |
-| `title` | text | Formulaic, and **the discriminating field**: near-unique across 13,971 rows (13,962 distinct). |
-| `description` | text, null | Per bucket, not per series — 121 distinct strings across 13,971 rows: 37 LLM-generated for CDC, 4 from Voteview's measure definitions, 80 from Clio-Infra's indicator pages. |
+| `title` | text | Formulaic, and **the discriminating field**: near-unique across 13,967 rows (13,961 distinct). |
+| `description` | text, null | Per bucket, not per series — 121 distinct strings across 13,967 rows: 37 LLM-generated for CDC, 4 from Voteview's measure definitions, 80 from Clio-Infra's indicator pages. |
 | `units` | text, null | |
 | `frequency` | text, null | |
 | `provisional` | boolean | Revised in later releases (VSRR counts). 442 rows. |
-| `is_active` | boolean, null | **NULL on all 13,971 rows** — the exporters have never written it, deferred with the document-store redesign. The column and the index exist; the data does not. |
+| `is_active` | boolean, null | **NULL on all 13,967 rows** — the exporters have never written it, deferred with the document-store redesign. The column and the index exist; the data does not. |
 | `facets` | jsonb | The values that pick this series out of its dataset. |
 | `retrieval` | jsonb | Which tool fetches it, and with what. |
 | `observation_start` / `observation_end` | date, null | Coverage bounds. |
@@ -93,10 +94,10 @@ tool that fetches it:
 
 ```mermaid
 graph LR
-    Q["series_catalog_search"] --> C[("series_catalog<br/>13,971 entries")]
+    Q["series_catalog_search"] --> C[("series_catalog<br/>13,967 entries")]
     C --> R{"entry.retrieval<br/>.tool"}
     R -->|"cdc_series_data<br/>2,346"| S["Socrata API<br/>(live fetch)"]
-    R -->|"timeseries_source_data<br/>11,625"| T[("time_series_source<br/>(stored)")]
+    R -->|"timeseries_source_data<br/>11,621"| T[("time_series_source<br/>(stored)")]
 ```
 
 Both outcomes, verified against the live table:
@@ -104,7 +105,7 @@ Both outcomes, verified against the live table:
 | `retrieval.tool` | Rows | What it is |
 | --- | --- | --- |
 | `cdc_series_data` | 2,346 | Live Socrata fetch. |
-| `timeseries_source_data` | 11,625 | The stored series — 11,042 Clio-Infra, 395 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview. |
+| `timeseries_source_data` | 11,621 | The stored series — 11,042 Clio-Infra, 391 Clio-Infra at historical borders, 171 NVSR, 9 WONDER, 8 Voteview. |
 | `null` | 0 | Nothing today. Kept nullable as a guard, with a test behind it. |
 
 That last row is why `retrieval.tool` is nullable rather than assumed present. A
@@ -116,7 +117,7 @@ gets it* — which is strictly better than a recipe that fails when replayed.
 Because the prose cannot tell these series apart, and the facets can.
 
 Descriptions are generated **one LLM call per bucket** of series that differ only
-by facet value — 13,971 series collapse into ~121 `(group, concept, facet-shape,
+by facet value — 13,967 series collapse into ~121 `(group, concept, facet-shape,
 unit)` buckets. That is deliberate and correct: within a bucket the series really
 do describe the same thing, and the per-series distinctions are already in
 `facets`. But it means free-text ranking has almost nothing to rank.
@@ -168,7 +169,7 @@ Two decisions worth keeping:
   first three of nine hundred" — which is the difference between a finished
   answer and a misleading one.
 - **`limit` is clamped to `MAX_LIMIT = 200`.** A facetless query would otherwise
-  hand an entire 13,971-row catalog to a model's context window.
+  hand an entire 13,967-row catalog to a model's context window.
 
 Models are in `mcp_server/series_catalog_models.py`: `CatalogEntry`,
 `CatalogSearchResult` (`total`, `returned`, `entries`), `CatalogConcept` and
@@ -247,9 +248,9 @@ database, not by reading the loader or the YAML.
 
 | Cut | Count |
 | --- | --- |
-| Total entries | 13,971 |
+| Total entries | 13,967 |
 | Socrata (`cdc_series_data` route) | 2,346 |
-| Stored (`timeseries_source_data` route) | 11,625 |
+| Stored (`timeseries_source_data` route) | 11,621 |
 | Distinct datasets | 6, plus null |
 | Distinct concepts | 100 |
 | Distinct descriptions | 121 |

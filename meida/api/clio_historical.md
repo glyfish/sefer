@@ -2,7 +2,7 @@
 
 Reference for the **DataverseNL** deposits of the Clio-Infra indicators — the
 same indicators as [clio.md](clio.md), with a different geography. Status:
-**built and loaded** — 395 stored series, served by the stored-series tools like
+**built and loaded** — 391 stored series, served by the stored-series tools like
 every other stored source.
 
 A separate source from `clio` because it differs in the two ways that matter
@@ -10,25 +10,27 @@ for managing it: its unit of geography (border periods, not modern states), and
 how it is obtained (by hand, not by script).
 
 **Mostly, it is the main site's data relabelled.** Every deposit's workbook
-lists the same ~1,412 GeaCron border periods, but in all except five indicators
-those rows are empty; the deposit's data is its CShapes rows, which *are* the
+lists the same 1,166 GeaCron border periods bar two — one lists 1,412, one
+none — but in all except four indicators those rows are empty, and only three
+carry values inside their own periods; the deposit's data is its CShapes rows, which *are* the
 main site's series, already stored as `clio`. What is stored here is the rest —
-one polity within one border period, from exchange rates to the pound (179),
-days lost in labour disputes (117), real wages (98) and one GDP row. Compared
+one polity within one border period, from exchange rates to the pound (176),
+days lost in labour disputes (117) and real wages (98). Compared
 value by value with the main site:
 
 | relation | series | |
 | --- | --- | --- |
-| `same` | 352 | the same country carries every value |
+| `same` | 349 | the same country carries every value |
 | `successor` | 38 | filed there under a modern state — Ottoman under Turkey, Prussia under Germany |
 | `differs` | 1 | the Netherlands 1820–39, which includes Belgium: exactly ⅔ + ⅓ |
-| `new` | 4 | Hong Kong (two), the Falklands, Yugoslavia |
+| `new` | 3 | Hong Kong, the Falklands, Yugoslavia |
 
 So its real value is the **border label** — that the 1850 value is the German
 Confederation's — and, more than the data, the **working papers**, whose units
 and documentation now feed `clio`. The comparison needs a relative tolerance:
 the main site keeps seven significant figures (`14.44252`), DataverseNL full
-precision (`14.4425187753`); an absolute 1e-6 once called 70 series "new".
+precision (`14.4425187753`); an absolute 1e-6 read 68 series wrong — 15 as
+"new", 53 as differing — where the relative rule finds 3 and 1.
 
 ## Access — by hand only
 
@@ -115,10 +117,13 @@ is the best metadata any Clio source has: title, authors, dates, the unit, an
 abstract, keywords, methodology with per-country caveats, data quality, sources,
 and often the full paper. `utils.documentation.build()` extracts every paper
 under `data/raw/` into one YAML file, keyed by the Clio series' indicator ids.
-**Every filed indicator has an entry — 76 —** 52 with a paper and 24 from a
-single-file download, which have no paper but still carry the workbook's
-identity and its row-2 unit (`workbook_unit`), unless row 2 merely repeats the
-indicator's name. `notebooks/clio`'s unit harvest reads this file and nothing
+**Every filed indicator has an entry — 76 —** 75 with a paper and one whose
+paper is a PDF and is not read; that one still carries the workbook's identity
+and its row-2 unit (`workbook_unit`), unless row 2 merely repeats the
+indicator's name. Twenty-four of the paper files are legacy Word 97 `.doc`
+rather than `.docx` — 23 papers of record and one superseded edition —
+converted with `textutil`; globbing `*.docx` alone passed over every one of
+them and recorded the deposit as having no paper. `notebooks/clio`'s unit harvest reads this file and nothing
 else.
 
 It lives in `data/`, gitignored and regenerable from the papers — but those were
@@ -131,16 +136,17 @@ What reading all of them turned up:
   DataverseNL's deposit version (1.1) is in none of the files. Kept as
   `paper_version`, normalised to `version_number`; it is what changes when the
   data itself is revised.
-- **"Unit of analysis" means two things.** 19 papers write *Country* — what is
+- **"Unit of analysis" means two things.** 41 of the 75 papers write *Country* — what is
   observed — and the rest write the unit (*deaths per 100,000 inhabitants*,
-  *number of years*, *percentage*). Four split section 7 into 7a (analysis,
+  *number of years*, *percentage*). Eleven split section 7 into 7a (analysis,
   always *Country*) and 7b (measurement). The derived `unit` takes 7b, else a
-  unit of analysis that is not *Country*, and says which in `unit_source`: 34
-  papers state a unit, 18 do not.
+  unit of analysis that is not *Country*, and says which in `unit_source`: 41
+  of the 75 papers state a unit, 34 do not. Row 2 overrides 31 of those, so ten
+  of Clio's units come from a paper.
 - **"Data quality" is often just the template's menu** — the four grades listed
   with no sentence saying which applies. Where a sentence follows, it is the
   assessment.
-- **Section 17, "Text", is the full paper** — 37 have one, up to 64,000
+- **Section 17, "Text", is the full paper** — 48 have one, up to 64,259
   characters — and its own chapters are numbered. So a numbered paragraph is a
   section only when its name is a template heading; otherwise it is body text.
 - **One deposit carries two editions.** GDP per capita has the 2013 Maddison
@@ -152,11 +158,13 @@ What reading all of them turned up:
   `…Cost of Basic Needs` (CBN), `…Dollar a Day` (DAD), `Wealth Top 10 percent
   share`. All in `WORKBOOK_ALIASES`.
 
-### Three workbook layouts
+### One workbook layout
 
-Found by the header row, `Webmapper code`, and whatever sits above it: title and
-unit (68 workbooks), title only on a sheet called `Sheet1` (10), or nothing (1).
-Where there is no title, the paper's own names the indicator.
+The indicator on row 1, the unit on row 2, the `Webmapper code` header on row 3
+— all 76. Eleven leave row 2 blank, and because Excel omits an empty row
+entirely, reading rows in document order closed the gap and made those look
+like a layout of their own, with the unit read as the title. The reader now
+indexes rows by their own numbers.
 
 ## What it adds over the main site — Labourers Real Wage
 
@@ -165,7 +173,7 @@ Every one of the 7,542 values compared against the main site's copy:
 | | values |
 | --- | --- |
 | identical | 6,993 |
-| same value, the main site files it under a modern successor | 292 |
+| same value, the main site files it under a modern successor | 294 |
 | new | 191 — Falklands, Tanzania, Hong Kong mostly |
 | differing | 64 — Canada, the Netherlands, Israel |
 
@@ -178,12 +186,14 @@ Every one of the 7,542 values compared against the main site's copy:
    the United Kingdom of the Netherlands. The one difference that is the
    borders doing their job.
 3. **The historical Canada rows are the United States.** Every value in the
-   GeaCron Canada rows and in `cshapes/1420` (1925–1947) equals the US series to
-   the digit, none equals Canada's; the modern Canada row `cshapes/1593` matches
+   GeaCron Canada rows (1925–1945) and in `cshapes/1420` (1946–47) equals the
+   US series to the digit, none equals Canada's; the modern Canada row `cshapes/1593` matches
    the main site 58 for 58. A labelling error, not a revision — and the main
    site's two uncoded "Canada" values for 1946–47 are the same US numbers.
-4. **Israel's first row is unexplained** — `cshapes/1477` holds four values
-   that look shifted by a decade.
+4. **Israel's row is shifted by a decade** — all ten values in `cshapes/1477`
+   equal the main site's Israel series ten years later. Four of them fall on
+   years the main site also has, which is why it first read as four
+   disagreements.
 
 An earlier reading reported (3) as "version 1.1 revised Canada by up to +78%".
 It compared by name, and the historical Canada rows hold another country.
@@ -208,10 +218,11 @@ Under `notebooks/clio_historical/`; `data/` is gitignored.
 
 | Path | What |
 | --- | --- |
+| `utils/__init__.py` | the MCP helpers the notebooks call, and the plotting helpers |
 | `utils/accept.py` | files a hand-downloaded folder, finds its DOI from the title, records version |
 | `utils/datasets.py` | every indicator's DataverseNL DOI, from the Handle redirect |
 | `utils/workbook.py` | reads the `Data` sheet into polity-periods |
-| `utils/documentation.py` | the `.docx` into named fields; `build()` → `data/documentation.yaml` |
+| `utils/documentation.py` | the paper (`.docx`, or `.doc` via `textutil`) into named fields; `build()` → `data/documentation.yaml` |
 | `utils/xlsx.py` | stdlib reader, copied from `notebooks/clio` |
 | `utils/historical_series.py` | one series per polity per border period; `relate()`, `EXCLUDED` |
 | `utils/catalog.py` | `export()` → `timeseries/clio_historical.jsonl` and the catalog |

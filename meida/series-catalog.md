@@ -4,6 +4,17 @@
 > is `mcp_server/series_catalog.py`, and three MCP tools serve it. 13,967 entries
 > are loaded under four sources: 11,042 Clio-Infra, 2,526 CDC, 391 Clio-Infra at
 > historical borders, 8 Voteview.
+>
+> **Live API sources are not in here.** FRED, BLS, BIS, Tiingo and the FBI keep
+> their catalogues as files beside their notebooks, feeding the document store.
+> Only sources whose observations are stored need a row in this table, and some
+> catalogues would not fit it anyway — BLS alone is 288,085 series.
+>
+> CDC's live Socrata entries are here for now because **its document store has
+> not been built yet**. When it is, those rows stop being needed and the
+> distinction is clean: stored observations in this table, discovery of live
+> series in the document store. Read CDC as work in progress rather than as the
+> pattern to copy.
 
 The discovery half of meida's database.
 [`time_series_source`](time-series-source.md) answers *"give me this stored

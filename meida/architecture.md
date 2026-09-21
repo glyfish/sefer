@@ -526,6 +526,7 @@ remember to read.
 | Voteview | No catalog — a static-file download of the DW-NOMINATE panel | `notebooks/voteview/data/` | 6 MB, 51,064 member-Congress rows |
 | Clio-Infra | The index page pairs each of 86 indicators with its workbook and published span | `notebooks/clio/data/` | 36 MB, 11,044 country series |
 | Clio-Infra at historical borders | The same indicators deposited on DataverseNL, one row per polity per border period, downloaded by hand | `notebooks/clio_historical/data/` | 76 of 86 deposits filed, 391 stored series |
+| FBI Crime Data Explorer | Offences and clearances monthly at three grains, police employment annually per agency; live API like FRED and BIS — **nothing in Postgres, catalogue as files for the document store** | `notebooks/fbi/data/` | 1,150 catalogue entries across 11 files, 19,636 agencies in the registry |
 
 ### Every writer, and where it writes
 

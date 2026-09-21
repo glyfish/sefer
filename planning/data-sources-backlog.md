@@ -522,6 +522,7 @@ the sequence below is the working roadmap.
 | **Financial** | FRED/BLS overlap | correctness task; yada-gated |
 | **Demographic (SDT)** | CDC · Voteview | token-free/no-auth; health + cheap cohesion legs; fit the series model |
 | **Demographic (SDT)** | Clio-Infra | historical backbone (§9); Excel loader, no API |
+| **Demographic (SDT)** | FBI Crime Data Explorer | **done** — live client + catalog; supplies the instability outcome *and* enforcement stance (clearance rates) and capacity (officer counts) |
 | **Demographic (SDT)** | Congress.gov | cosponsorship + Record text + policy→sector; key + graph/NLP — **lit review first** |
 | **Other** | Polymarket | forward-looking event probabilities; **research first**, after Clio-Infra (§3) |
 | **Other** | LittleSis | corporate/ownership graph; **lit review first** (§4) |

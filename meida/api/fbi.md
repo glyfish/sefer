@@ -1,18 +1,20 @@
 # FBI Reference — the Crime Data Explorer API and the catalog
 
 Reference for the FBI **Crime Data Explorer (CDE)** integration: monthly
-offences and clearances at three geographic grains, annual police employment at
-one, and the metadata catalog built out of those same calls. Built and in use —
-`FbiClient` and its models in `clients/`, the export in
-`notebooks/fbi/utils/catalog.py`, two notebooks, and 38 tests.
+offences and clearances at three geographic grains, monthly arrests for all
+offences together or for any one of 48 arrest codes, annual police employment at
+one grain, and the metadata catalog built out of those same calls. Built and in
+use — `FbiClient` and its models in `clients/`, three MCP tools, the export in
+`notebooks/fbi/utils/catalog.py`, six notebooks, and a suite of 866 tests.
 
-**Not yet built, and worth knowing before reading further:** there are no FBI
-MCP tools. `mcp_server/server.py` defines 29 tools and none of them is
-`fbi_offenses` or `fbi_employment`, which is what every catalog entry's
-`retrieval` block names. Nor is the catalog loaded: `series_catalog` holds
-13,967 rows under `clio`, `cdc`, `clio_historical` and `voteview`, and none
-under `fbi`. The catalog files describe series that nothing in the server can
-fetch yet.
+**Where this stands, as of 26 September 2026.** `fbi_offenses`, `fbi_arrests`
+and `fbi_employment` are defined in `mcp_server/server.py` and served, and every
+catalog entry's `retrieval` block names one of them. None of the FBI work is
+committed yet. The catalog is **not** loaded into `series_catalog` and is not
+meant to be: a live API source keeps its catalog as files for the document store,
+and Postgres holds only the sources whose observations are stored. The catalog's
+1,150 entries are state-grain offences and employment only — it predates the
+arrest route and holds no arrest series.
 
 The FBI fills the **enforcement** leg: crime and the police staffing that
 responds to it, for the same department, from one source. That pairing is why
@@ -87,26 +89,56 @@ locally rather than inferred from the national dip. 2,684 of them start in
 
 ## The request contract
 
-**One request yields four series.** The API is parameterised by *scope, offence
-and date range only*; offences and clearances, as counts and as rates, all
-arrive together, alongside the population denominator and the coverage
-percentage. So the two halves of the vocabulary are not the same thing:
+**One request yields nine series, or seven, or five.** The API is parameterised
+by *scope, offence and date range only*; every other distinction a tool offers
+is a selection from a payload that already holds all of it. Counted off live
+payloads in September 2026:
+
+| request | series in the response |
+| --- | --- |
+| `summarized/agency/{ORI}/{offense}` | **9** — offences and clearances as counts and as rates (4), population for the agency *and* for its state (2), participated population for both (2), the state's coverage percentage (1) |
+| `summarized/national/{offense}`, `summarized/state/{ST}/{offense}` | **7** — the same four data series, one population, one participated population, one coverage |
+| `arrest/{scope}/{offense}` | **5** at agency scope — arrests as count and as rate, the two populations, coverage |
+| `pe/agency/{ORI}` | male and female officers and civilians, each its own series, plus the participated population |
+
+So the two halves of the vocabulary are not the same thing:
 
 | | parameters |
 | --- | --- |
-| **the API request** | `scope` (in the path), `offense` (in the path), `from`, `to` |
+| **the `summarized` request** | `scope` (in the path), `offense` (in the path), `from`, `to` |
 | **`fbi_offenses`** | those, plus `measure` and `unit`, which **select from the response** |
+| **the `arrest` request** | `scope` (in the path), `offense` (in the path — one of 48 arrest codes), `from`, `to`, `type` |
+| **`fbi_arrests`** | those, plus `unit`, again a selection |
 | **the `pe` request** | `ori` (in the path), `from`, `to` |
 | **`fbi_employment`** | those, plus `measure` — officers or civilians, again a selection |
 
-`measure` and `unit` never reach the FBI. They belong in the entry's
-`retrieval` block because that block's job is to identify *which* of a
-payload's series an entry refers to, and without them the four entries a scope
+`measure` and `unit` never reach the FBI; `offense` does, on both routes, and on
+the arrest route it is the only way to narrow a request. They belong in the
+entry's `retrieval` block because that block's job is to identify *which* of a
+payload's series an entry refers to, and without them the entries a scope
 produces are indistinguishable to a consumer holding one of them. But a cache
 in front of this client must key on the **request** — scope, offence, range —
-and not on the tool's arguments. Keyed on the payload, four series cost one
-call; keyed on measure and unit they cost four, against an allowance of a
+and not on the tool's arguments. Keyed on the payload, four offence series cost
+one call; keyed on measure and unit they cost four, against an allowance of a
 thousand an hour.
+
+**Nothing caches this today.** `_call_fbi` in `mcp_server/server.py` opens a
+fresh `FbiClient` per tool call and the client holds nothing between calls, so
+`measure="offenses"` and `measure="clearances"` for one scope and window are two
+identical HTTP requests, as are `unit="count"` and `unit="rate"`. The walkthrough
+notebook's twelve offence calls are six requests' worth of data fetched twice,
+and that is against a gateway observed refusing a quarter of requests with 503s.
+
+**For the series cache in yada.** A cache keyed per series — the
+`(source, native_id, frequency)` shape `time_series_cache` uses — will re-fetch
+one payload up to four times on the offence route and twice on the arrest route,
+because four or two of its rows are the same fetch. Either the fetch beneath the
+cache keys on the request and hands out the series it already holds, or the
+cache accepts that the duplication is the API allowance being spent four times
+over. The same argument reaches further than the measures: population, coverage
+and participated population are properties of the *scope and window*, not of
+the offence, so ten offence requests for one state fetch the same three context
+series ten times.
 
 The same holds across offences for the two carried blocks: population and
 coverage are properties of the scope and the window, not of the offence. In
@@ -168,6 +200,39 @@ all 10 employment entries 2024-01-01 because `get_offenses` defaults to
 `end="12-2024"` and `get_employment` to `end=2024`, while the same payloads
 report a UCR vintage of `09/2026`. The spans are honest about what was asked
 for and silent about what was available.
+
+## Demographics, and the route that does not exist
+
+Arrestee sex, race and age are served, but only by `type=totals`, which carries
+**no time dimension at all**: one figure per block for the whole window asked
+for. One national 2023 call returns the complete 49-code offence breakdown
+summing exactly to the 7,184,021 all-offence total, the same mix grouped two
+coarser ways, and then `Arrestee Sex`, `Arrestee Race`, `Male Arrests By Age` and
+`Female Arrests By Age`. So the whole arrest mix *and* its demographics cost one
+request per scope per window — 40 requests for a national annual series of
+everything, not 40 per code. The demographic blocks do not cover every arrest:
+sex sums to 7,076,786 against the 7,184,021 total, so 1.5% carry no record.
+`FbiClient` sends `type=counts` and never reads this.
+
+**There is no monthly demographic series.** The spec defines a schema
+`arrest_offense_category` with the enum `["male", "female", "race", "sex"]`, and
+**no path references it**; the api.data.gov gateway's own 2022 documentation
+shows `arrest/{scope}/{offense}/{category}` sub-paths. They do not exist. Probed
+on 26 September 2026 with a control in the same run:
+
+| request | answer |
+| --- | --- |
+| `arrest/national/11` (control) | **200**, monthly `actuals` and `rates` |
+| `arrest/national/11/sex` | **404**, and the body is HTML |
+| `arrest/national/11/male` | **404** |
+| `arrest/national/11/race` | **404** |
+| `arrest/national/11/female` | **404** |
+
+A 404 rather than a 400 is the gateway saying the route is not mapped, and the
+control rules out a key, window or outage explanation. Demographics over time
+therefore come from one request per period, or from the NIBRS incident files,
+which carry age, sex, race and ethnicity per victim, offender and arrestee.
+Do not spend requests probing these sub-paths again.
 
 ## Coverage, and the two-part 2021 break
 

@@ -43,6 +43,10 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+
+# private 
+research/
+
 nosetests.xml
 coverage.xml
 *.cover

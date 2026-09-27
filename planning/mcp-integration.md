@@ -35,7 +35,7 @@ discovery, plots). No navi or alef work.
 | Tiingo | 2 | 2 | — (no catalogue exists) |
 | BLS | 5 | 0 | 288,085 |
 | BIS | 3 | 0 | 26,902 |
-| FBI | 3 | 0 | 1,150 catalogued, arrests harvesting |
+| FBI | 3 | 0 | 1,150 catalogued — a deliberate slice, see §2 |
 | CDC | 6 | 0 | 2,346 live Socrata |
 | `timeseries_source_*` | 3 | 0 | **11,621 stored** |
 | `series_catalog_*` | 3 | 0 | **13,967 catalogue entries** |
@@ -128,6 +128,32 @@ filtering or grouping by source name must not assume the two agree.
 
 Joining the halves into one continuous series is **deferred** until modelling says
 what is needed (§5).
+
+### The FBI catalogue is a deliberate slice, not the source
+
+The 1,150 entries are **not** an enumeration of what the FBI serves. Measured
+across the eleven export files:
+
+- **57 scopes**: national, the 50 states plus DC and five territories, and
+  **five hand-picked agency ORIs** (`NY0303000`, `ILCPD0000`, `DCMPD0000`,
+  `PAPEP0000`, `CA0194200`).
+- **`count` only** — no `rate` variants, though the tools serve them.
+- **Offences and clearances only** — employment covers just five scopes, and
+  **arrests are not catalogued at all**. A harvest of 2,736 code × scope pairs is
+  running as this is written and will add them.
+
+The dimension that is missing is the one the research wants. The CDE registry
+holds **19,636 agencies, 11,784 of them city departments**, and the
+enforcement-cycle work needs a *city* panel of offences against officers per head.
+Fully enumerated, agency scope is roughly 19,636 × 10 offences × 2 measures ≈
+**390,000 series** — larger than the FRED catalogue, for one source.
+
+**So the FBI is the source where enumeration stops being the right model.** Its
+discovery has to be *generative*: search the agency registry, then construct the
+`retrieval` block from the chosen ORI, rather than pre-catalogue the cross
+product. That distinction should be settled in the document-store redesign, and
+it is a second argument — beside scale — against assuming every source's
+discovery is a table of rows.
 
 ---
 
@@ -249,11 +275,12 @@ no policy decision attached. One guard is needed — `cdc_series_data` has `limi
 and no vendor total**, so a truncated result is indistinguishable from a complete
 one. Set `truncated: true` in cache metadata when `row_count == limit`.
 
-The FBI follows, and needs two things beyond the dispatcher: a decision about
-where its catalogue lives (§5), and its `notices` carried into cached metadata
-rather than dropped — otherwise a run of unfiled months becomes nulls with no
-explanation. Its catalogue is mid-harvest as of this writing and will roughly
-triple, so the count above is a floor.
+The FBI follows, and needs three things beyond the dispatcher: a decision about
+where its catalogue lives (§5); its `notices` carried into cached metadata rather
+than dropped, or a run of unfiled months becomes nulls with no explanation; and a
+way to reach **agency scope**, which the catalogue deliberately does not
+enumerate (§2). For Wave 0 the five catalogued ORIs are enough to exercise the
+path; the general case is a discovery question, not a fetch one.
 
 **W0-4 · Plot and report path.**
 

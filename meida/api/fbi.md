@@ -440,7 +440,7 @@ So `_periodic` recognises them and hands the blanks back **as the CDE sent them*
 | test | constant | what it is |
 | --- | --- | --- |
 | shape | `PERIOD_LENGTHS = (3, 6, 12)` | a maximal run of `k - 1` blanks closed by a filing, `k` quarterly, semiannual or annual. A trailing run has no closing filing and is never periodic |
-| would-otherwise-be-a-gap | `UNFILED_RUN_FLOOR` | the run must already fail the mass test. A run the rule would keep anyway needs no schedule, and claiming one would be a false claim about a quiet stretch |
+| would-otherwise-be-a-gap | `UNFILED_RUN_FLOOR` | the run must already reach the mass floor, i.e. the rule above would call it a missing return. A run that rule would keep anyway needs no schedule, and claiming one would be a false claim about a quiet stretch — national gambling-numbers arrests run at three a year, so two blanks closed by a filing of 1 match the shape of a quarter and mean nothing |
 | mass | `PERIOD_SHARE = 0.5`, `PERIOD_CEILING = 2.0` | the closing filing carries between half and twice the period's expected filings, measured with every candidate's closing month left out |
 
 Where the neighbourhood holds fewer than `ORDINARY_MIN` = 6 ordinary filings the
@@ -487,7 +487,8 @@ the FBI's 2023 `totals` give that code. Code `23` is null in all 84 months of
 2018-2024 and its 2023 total is 0. Read as missing returns, those months cost the
 series its span and invent a "data stops" notice two years before the data does.
 
-At agency scope the spelling has **not been seen**: San Francisco's murder
+At agency scope that spelling has **not been seen** — a month with no arrest for
+one code comes back as 0 there, not as null: San Francisco's murder
 arrests are 0 in 42 months in which the department filed other arrests, the
 NYPD's in 8, and the only agency nulls in the saved payloads — San Francisco's
 and Los Angeles' twelve months of 2021 — are months with no participated
@@ -578,8 +579,8 @@ around it and the smallest lump taken 7.78, either side of a line at three.
 
 ## The traps
 
-Seven, each with what establishes it. The first three were the original probe's;
-four more came with the arrest route.
+Seven, each with what establishes it. The first three are the original probe's
+and the sixth the exported catalog's; 4, 5 and 7 came with the arrest route.
 
 **1. An agency request returns three geographies, widest first.** Ask for NYPD
 homicides and the `rates` block leads with *New York Offenses* — the state, at
@@ -704,8 +705,8 @@ monthly series):
 
 Over the full 1985–2024 window the national mean is **93.68%** and the lowest
 single month **74.12%** (February 2021) — the figures every national entry in the
-catalog carries, and the same two figures the national *arrest* total reports,
-because it is the same block attached twice.
+catalog carries, and, as `enforcement.ipynb` §1 measures, the same two figures the
+national *arrest* total reports, because it is the same block attached twice.
 
 **The 2021 break is two breaks, and only one of them is measured.**
 

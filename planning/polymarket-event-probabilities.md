@@ -5,7 +5,7 @@ evening against the corpus it asked for.** Stage 1 below was built rather than
 scheduled, and at four venues instead of one: **50,689 markets, 2,426,246
 market-days, horizons out to 890 days, authoritative settled labels throughout**,
 in [`meida/notebooks/prediction_markets`](#the-corpus-that-answers-this-document)
-— readers, a metric catalogue and five notebooks. So the question this document
+— venue readers, a metric catalogue and four notebooks. So the question this document
 called decisive is answered with data, **three of its recommendations are wrong**,
 and six of its factual claims needed correcting or narrowing. Figures added in
 this revision are marked *measured* and were computed from that corpus, then
@@ -68,7 +68,7 @@ the corpus load), alef (the calibration analysis).
 
 | Phase | Owner | Work | State, 26 Sep 2026 |
 | --- | --- | --- | --- |
-| Calibration corpus | meida notebook → alef | Labelled corpus + reliability curves by horizon | **Done, and wider than scoped** — four venues, 50,689 markets, five notebooks under `notebooks/prediction_markets/` |
+| Calibration corpus | meida notebook → alef | Labelled corpus + reliability curves by horizon | **Done, and wider than scoped** — four venues, 50,689 markets, four notebooks under `notebooks/prediction_markets/` |
 | Client + tools | meida | `clients/polymarket.py`, wire models, 2–4 MCP tools | Not started; the notebook readers (`utils/polymarket.py`, 2,091 lines) are the prototype |
 | Catalogue | meida | File catalogue per tag, daily snapshot, `_int` mirrors | Not started; the harvest already carries a 58-tag curated registry and `_int` mirrors |
 | Watchlist monitoring | yada | Depth-floor refresh, alert predicates, plots | Not started; re-scope to ≤30 days |
@@ -193,7 +193,7 @@ the research run only sampled.
 | §5 — the structured `resolutionSource` field "carries nothing usable" | It is non-empty on **12,728 of 72,838** closed markets (17.5%), with only **117 distinct values**, 12,478 of them deep links: `x.com/elonmusk` (4,844 markets), a WTI price app (1,671), `truthsocial.com/@realDonaldTrump` (726), `x.com/khamenei_ir` (707), `tsa.gov` passenger volumes (617). It is populated where the source is a **feed** and absent where the contract needs a judgement — on the geopolitics tag it is **52 of 7,928** markets. So: a hint on a sixth of the book, near-useless on this project's sixth *(this revision, single pass)* | **CORRECTED** |
 | §1.7 — correct with "a longshot haircut below ~10¢ (≈ ×0.8)" | The haircut is aimed at the wrong part of the book. The published −19.3¢/$ reproduces at **−19.6%** in the 5–10¢ band, but that is a **return on an absolute gap of 1.38¢**; below 2¢ the gap is **0.23¢** and the ratio −51.9%. The largest *absolute* mispricing is **25–50¢**, on both large venues independently: **+9.21¢** Polymarket, **+6.70¢** Kalshi. And it is a horizon interaction, not a price effect: +2.10¢ intraday → +11.86¢ at 7–30 days → **+24.40¢** at 180–365 days on Polymarket, and −8.03¢ → **+21.72¢** on Kalshi, a sign flip. **A flat haircut is the wrong instrument** | **CORRECTED** |
 | §1.1 — the "X by *date*" ladders are cumulative | Five kinds, not one, across **3,787** ladders detected in the closed corpus. And a by-date ladder is a CDF **only for an absorbing event**: **63 of 1,034** settled non-monotonically, YES at one deadline and NO at a later one, because for a recurring event the re-issues are *rolling* windows rather than nested ones | **CORRECTED** |
-| §1 — "discount adjustment removes 48–88% of the apparent long-horizon miscalibration gradient" (imported from arXiv:2605.31431) | Cannot be the gradient measured here, **by sign**. This corpus's long-horizon error is the **price above** the outcome; the discount correction moves the price **up**. On the live fifteen-rung ladder the correction is +0.03¢ at 36 days and **+4.21¢ at 462 days** — about one point of a nine-point gap, applied in the direction that **widens** it. Either the published gradient is a different quantity (a compression slope, not a mean gap) or it does not survive out of sample; the paper's body is still unread | **CORRECTED** |
+| §1 — "discount adjustment removes 48–88% of the apparent long-horizon miscalibration gradient" (imported from arXiv:2605.31431) | Cannot be the gradient measured here, **by sign**. This corpus's long-horizon error is the **price above** the outcome; the discount correction moves the price **up**. On the live fifteen-rung ladder the correction is +0.03¢ at 36 days and **+4.21¢ at 462 days** — about one point of a nine-point gap *(this revision, single pass)*, applied in the direction that **widens** it. Either the published gradient is a different quantity (a compression slope, not a mean gap) or it does not survive out of sample; the paper's body is still unread | **CORRECTED** |
 | §2 — "**Calibration beyond one month.** No evidence exists, from any source" | True of the literature as of 2026-09-26, and no longer true of this stack. See the new tables in §2 | **ANSWERED** |
 
 **Confirmed at scale, and worth saying because each was a single-market or
@@ -284,7 +284,7 @@ wedge below is quantified, and they do not all point the same way.
 | **Capital lock-up** | price **below** true p | pUSD pays the holder nothing, so a claim settling in τ years should trade near `p·exp(−rτ)`. Treasury par yields 2026-09-25: 3m **4.24%**, 1y 4.50%, 2y **4.81%**, 3y 4.94% | Everything, scaled by horizon |
 | **Holding Rewards** | offsets the lock-up | Polymarket pays an annualized rate on the mid-price value of positions in a curated set. **25 of 1,500 events carry an "Earn 4%" tag and 555 markets have `holdingRewardsEnabled: true`** *(single pass)* — and they are precisely this project's markets (2028 nominees/winner, 2026 midterms, Taiwan 2026, Xi/Putin/Netanyahu/Zelenskyy exit, Russia–Ukraine ceasefire). The live tag says 4%, the help article 3.25%; the rate is variable at Polymarket's discretion | The 555 flagged markets |
 | **Favourite-longshot bias** | price above true p at the low end | Published: purchases **below 10¢ lose 19.3¢ per dollar**; at/above 90¢ they earn 0.83¢. **Reproduced and re-sited** (*measured*): −19.6% in the 5–10¢ band on 10,194 rows, but the absolute gap there is **1.38¢** and below 2¢ it is **0.23¢** — the big ratio is a small gap over a small denominator. The big *gap* is at **25–50¢**: +9.21¢ | Crypto and Politics; **absent in Sports**; and **absent in Polymarket's own geopolitics subset** (+0.01¢ at 5–10¢, and *inverted* at 10–25¢ where the realised rate exceeds the price by 3.29¢) |
-| **Horizon bias** — *the wedge this table was missing* | price above true p, growing with time to resolution | Pooled across three venues (*measured*): **−0.4pp** inside a day, **+3.0pp** at 7–30 days, **+5.6pp** at 30–90 days, **+8.3pp** at 180–365 days, **+9.0pp** at 1–2 years. Bootstrap intervals clustered on markets exclude zero from 7–30 days on Polymarket and from 90–180 days on Kalshi. Survives holding the market set fixed | Everything, on both large venues, and **worst on Polymarket geopolitics at range: +14.0pp beyond 180 days** against −0.8pp pooled over all horizons |
+| **Horizon bias** — *the wedge this table was missing* | price above true p, growing with time to resolution | Pooled across three venues (*measured*): **−0.4pp** inside a day, **+3.0pp** at 7–30 days, **+5.6pp** at 30–90 days, **+4.6pp** at 90–180 days, **+8.3pp** at 180–365 days, **+9.0pp** at 1–2 years — **growing but not strictly monotone**: the 90–180 day dip is in the pooled numbers and on Polymarket (+7.0pp at 30–90 days against +6.7pp), while Kalshi rises straight through it (+0.3pp to +1.3pp). Bootstrap intervals clustered on markets exclude zero from 7–30 days on Polymarket and from 90–180 days on Kalshi. Survives holding the market set fixed | Everything, on both large venues, and **worst on Polymarket geopolitics at range: +14.0pp beyond 180 days** against −0.8pp pooled over all horizons |
 | **Compression toward 50%** | both directions | Published: mean calibration slope **0.99 at 0–1h rising monotonically to 1.32 at 1 month+**; Polymarket 1.31 vs Kalshi 1.64, "a structural property of political prediction markets rather than a single-platform artefact". **Not reproduced** (*measured*): the corpus's linear slope of outcome on price runs the other way, **1.033 → 0.726** with horizon, and its logit slope — printed only for comparability, a coarse binned fit the notebook explicitly declines to stand behind — is **1.340 inside a day falling to 0.983 by a year** on Polymarket. Two different estimators; **treat this wedge as unconfirmed rather than as measured in either direction** | Politics, both venues |
 | **Oracle risk** | unpriced, tail | UMA optimistic oracle: anyone proposes with a bond, 2-hour challenge window, escalating to a token-holder vote. **`umaBond` is $500 on the $42.9M Taiwan market** and $25,000 on the 2028 nominee markets — bonds are trivial relative to stakes | Everything |
 
@@ -296,9 +296,10 @@ reward-eligible). The corrections must be applied **per market, conditional on
 
 **And measured, the low end is where there is almost nothing to correct.** Both
 of those wedges are sub-cent quantities at 5¢, while the corpus says the error
-that matters is **+9¢ in the middle of the book at six to twelve months**. The
-practical ordering is the reverse of the one this section originally implied: fix
-the horizon first, the mid-range second, and the longshot haircut last if at all.
+that matters is **+9.2¢ in the middle of the book pooled, and +24.4¢ there at six
+to twelve months**. The practical ordering is the reverse of the one this section
+originally implied: fix the horizon first, the mid-range second, and the longshot
+haircut last if at all.
 The discount correction is measured on a live ladder below and is worth
 **+0.03¢ at 36 days and +4.21¢ at 462 days** — a rounding error at the front and
 **four times the bid-ask spread** on the last rung, which is the one fact in this
@@ -319,13 +320,16 @@ is correctable — but until the paper's body is read, **use today's Treasury cu
 (4.24–4.94%) as the anchor for `r`, not the 4.4% constant one pass proposed.**
 
 **That inference does not survive contact with this corpus, and the reason is the
-sign** (*measured*). The long-horizon error here is the **price sitting above the
-outcome** — +8.3pp at 180–365 days, +9.0pp at 1–2 years — and the discount
+sign.** The long-horizon error here is the **price sitting above the outcome** —
++8.3pp at 180–365 days, +9.0pp at 1–2 years (*measured*) — and the discount
 correction raises the price further. Applied at the Treasury curve it is worth
-about **1 point of that 9**, in the direction that **widens** the gap rather than
-closing it. So either the published "gradient" is a different quantity from a mean
-gap (most likely a compression slope, which this corpus also fails to reproduce),
-or it does not survive on a near-population sample. Two things follow and both are
+about **1 point of that 9** at a mean price near 0.27, in the direction that
+**widens** the gap rather than closing it *(this revision, single pass — the
+arithmetic is first-order, on the corpus's own mean price and the measured rung
+corrections, and nobody has re-derived it)*. So either the published "gradient" is
+a different quantity from a mean gap — most likely a compression slope, which this
+corpus also fails to reproduce — or it does not survive on a near-population
+sample. Two things follow and both are
 operational: the discount is still the right correction to apply **before
 differencing a ladder** whose rungs settle at different dates, because there it
 removes a real artefact; and it is **not** an explanation of the horizon bias, so
@@ -1273,7 +1277,7 @@ before 2027?* ($66M) and *Will LeBron James win the 2028 US Presidential
 Election?* ($54.8M) alongside *Will the U.S. invade Iran before 2027?* ($69.6M,
 $7.9M OI) and *Xi Jinping out before 2027?* ($14M). The corpus has what is
 wanted; the filter is the work. **Do this before writing a client.** *What was
-built instead:* four readers and five notebooks — `polymarket` (hosts,
+built instead:* four venue readers and four notebooks — `polymarket` (hosts,
 identifiers, traps, wedges, a worked quality read, the ladder, discovery,
 resolution), `kalshi`, `predictit_and_iem`, and `calibration` for the cross-venue
 result — plus `utils/metrics.py`, a catalogue of 17 measure families each carrying
@@ -1287,8 +1291,9 @@ pre-2025 price quality). The silences are the part worth keeping.
 venues.** *What was built:* the census table at the top of this document, and the
 calibration, longshot and metric results throughout it. The cost estimate held —
 4,521 requests for Polymarket. Two things the original scoping got wrong: the
-corpus is **not** geopolitics-only (a 58-tag political and macro registry, because
-19,453 geopolitics market-bucket rows cannot carry a horizon cut on their own), and
+corpus is **not** geopolitics-only — it runs off a 58-tag political and macro
+registry, because the geopolitics tag alone yields **198 markets at 180–365 days
+and 7 beyond a year**, which cannot carry a horizon cut — and
 it is **not** Polymarket-only (Kalshi's 990 markets at 1–2 years are what the
 headline rests on, since Polymarket's same cell is 82). Originally scoped as:
 backfill the

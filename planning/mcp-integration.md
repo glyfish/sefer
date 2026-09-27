@@ -291,12 +291,33 @@ alphabetical column order.
 
 Recorded here so the integration work does not pre-empt them.
 
-- **Do the catalogues move into Postgres?** The `series_catalog` table was built
-  for CDC, but nothing about it is CDC-specific and the loader is already
-  source-parameterised. Everything consolidated is roughly **553,000 rows**. The
-  standing objection — "BLS alone is 288,085 series" — has never been
-  benchmarked, and 550k rows with a GIN index is unremarkable; `pg_trgm` is
-  available and uninstalled. **Measure before accepting it as a constraint.**
+- **Do the catalogues move into Postgres?** The question is narrower than it
+  looks, because **this generalisation has already happened twice in this repo.**
+
+  `time_series_source` exists because NVSR and WONDER have no per-request API —
+  they are Excel workbooks, so serving them at all required an observation store.
+  That store was built for those 180 series and then absorbed Clio-Infra, Clio at
+  historical borders and Voteview with **zero source-specific server code**
+  (`grep` for source names in `mcp_server/timeseries_source.py` returns none). It
+  now serves **11,621** series: a 65× expansion over the requirement that forced
+  it into existence.
+
+  `series_catalog` was built for CDC and has the same shape — a
+  source-parameterised loader, upsert on `(source, key)`, prune scoped to one
+  source — and it has **already absorbed three further sources**. Its only source
+  references are a default argument and two doc examples; there is no
+  behavioural branching.
+
+  So the open questions are not "will it generalise". They are:
+
+  1. **Scale.** Everything consolidated is roughly **553,000 rows**. The standing
+     objection — "BLS alone is 288,085 series" — has never been benchmarked, and
+     550k rows with a GIN index is unremarkable; `pg_trgm` is available and
+     uninstalled. **Measure before accepting it as a constraint.**
+  2. **The file-catalogue sources.** FRED, BLS, BIS and the FBI export YAML that
+     lacks `retrieval`, and BLS/BIS/FBI lack `description` — so consolidating
+     them means synthesising a retrieval block per source, not just loading rows.
+     The FBI's already has one; the others do not.
 - **Is the ETF store the outlier?** Probably, and for a structural reason: it is
   not a series catalogue but instrument metadata, and 67% of its 36,475 documents
   are German regional venue duplicates of US listings.

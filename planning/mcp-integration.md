@@ -152,9 +152,14 @@ now distinguishable from "nobody harvested gambling."
 **Two gaps stand between the files and `series_catalog`**, which still holds zero
 `fbi` rows:
 
-1. **The field is `definition`, not `description`.** `load_catalog._row()` reads
-   `entry.get("description")`, so a load today silently drops all 3,886 per-code
-   trap notes. One line, in the exporter or the loader.
+1. **FBI spells the prose field `definition`; everyone else spells it
+   `description`.** These are aliases, not different things — Clio writes the
+   identical text under both names, CDC writes only `description`, and there is no
+   `definition` column in the table, the models or the loader. But
+   `load_catalog._row()` reads only `description`, so a load today silently drops
+   all 3,886 per-code trap notes. One line, best placed in the loader
+   (`entry.get("description") or entry.get("definition")`), since that is the
+   single place every source is read and the FBI files would not need regenerating.
 2. **The probe measurements have no column.** Entries carry
    `coverage_mean_percent`, `coverage_min_percent`, `participated_population`,
    `filings`, `arrests_total`, `blank_month_notices` and `sources`; the table has

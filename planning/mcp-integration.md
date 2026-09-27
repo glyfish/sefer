@@ -56,10 +56,21 @@ does not survive measurement.
 ### Route A — stored series
 
 `timeseries_source_data(source, native_id, frequency)` serves **all 11,621**
-stored series: Clio-Infra 11,042, Clio at historical borders 391, NVSR 171,
-WONDER 9, Voteview 8. One request returns one `TimeSeriesRecord`, whose
-observation payload was written to match yada's `time_series_cache` contract
-verbatim.
+stored series. One request returns one `TimeSeriesRecord`, whose observation
+payload was written to match yada's `time_series_cache` contract verbatim.
+
+| Stored source | Series | Origin |
+| --- | --- | --- |
+| `clio` | 11,042 | Clio-Infra workbooks |
+| `clio_historical` | 391 | DataverseNL deposits |
+| `cdc_nvsr` | 171 | **Excel workbooks on CDC's FTP** (`Table01–18.xlsx`) |
+| `cdc_wonder` | 9 | **Excel** — the WONDER API is throttled to ~1 query / 2 min behind an Akamai bot filter |
+| `voteview` | 8 | DW-NOMINATE tables |
+
+These are the only sources whose **observations** live in meida's Postgres. Being
+spreadsheet-derived is *why* they are stored rather than fetched: there is no
+per-request API behind them, so they cannot be refreshed on demand and
+`timeseries_source_stale` exists to make refreshing a deliberate act.
 
 **One tool class covers five sources. The marginal cost of sources two through
 five is zero.**
@@ -81,6 +92,42 @@ marginal cost of each further catalogued source is zero.
 
 BLS and BIS. No `retrieval`, no `description`, catalogues only as gitignored
 YAML. These are the genuinely document-store-gated sources.
+
+### CDC straddles two routes, and its history breaks at 2018
+
+Only the **NVSR and WONDER components are in Postgres** (180 series, Excel-derived,
+Route A). The other **2,346 are live Socrata** (Route B) and nothing of them is
+stored. Discovery does not follow that split: all 2,526 sit in `series_catalog`
+under the single source name `cdc`, and the route is told apart by
+`retrieval.tool` — `timeseries_source_data` for the stored 180,
+`cdc_series_data` for the live 2,346.
+
+The Socrata half does not give a continuous modern series. Measured:
+
+| Dataset | Series | Covers |
+| --- | --- | --- |
+| `w9j2-ggv5` death rates & life expectancy | 18 | 1900–**2018** |
+| `9j2v-jamp` suicide rates | 42 | 1950–**2018** |
+| `hksd-2xuw` chronic disease / alcohol | 1,816 | **2019**–2023 |
+| `w26f-tf3h` | 28 | 2018–2024 |
+| `489q-934x` | 18 | 2023–2025 |
+| `xkb8-kh2a` VSRR provisional | 424 | 2015–2026 |
+
+**Both long-history datasets stop at 2018**, and 77% of the Socrata catalogue is a
+five-year BRFSS window opening in 2019. So CDC Socrata is not a contemporary
+deaths-of-despair source on its own — it is deep history that ends at 2018 plus a
+recent narrow window, with the discontinuity falling exactly between them. The
+stored NVSR life-expectancy series (2018–2024) bridge that seam, which is why the
+Excel route exists at all.
+
+Two consequences for this work. **Rank CDC on that basis, not on its 2,346
+count.** And **the source vocabularies differ between meida's two tables** —
+`series_catalog` says `cdc`, `time_series_source` says `cdc_nvsr` and
+`cdc_wonder`. A dispatcher keyed on `retrieval.tool` is unaffected, but anything
+filtering or grouping by source name must not assume the two agree.
+
+Joining the halves into one continuous series is **deferred** until modelling says
+what is needed (§5).
 
 ---
 
@@ -195,9 +242,10 @@ Add `fetch_from_retrieval(retrieval, series_id)` dispatching on
 makes every future catalogued source free, and it is what replaces
 `SERIES_SOURCE_SPECS` entirely in Wave 1.
 
-Take **CDC first**: its 2,346 entries are already in `series_catalog` with
-complete retrieval blocks, so it exercises the dispatcher with no policy decision
-attached. One guard is needed — `cdc_series_data` has `limit=1000`, **no offset
+Take **CDC Socrata first**: its 2,346 live series are already *catalogued* in
+`series_catalog` with complete retrieval blocks — catalogued, not stored; no
+observation of them exists in Postgres — so it exercises the live-fetch path with
+no policy decision attached. One guard is needed — `cdc_series_data` has `limit=1000`, **no offset
 and no vendor total**, so a truncated result is indistinguishable from a complete
 one. Set `truncated: true` in cache metadata when `row_count == limit`.
 

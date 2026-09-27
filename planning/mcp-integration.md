@@ -221,12 +221,15 @@ distinction generalises:
 | Cost to regenerate | a bulk download | one rate-limited call per row |
 | If lost | re-export | re-measure, over hours, against a key that can lock out |
 
-Two consequences. The redesign must not assume "catalogue = local copy of an
-enumerable source"; a probe catalogue is closer to primary data than to build
-output. And the convention that
-[regenerable catalogues are gitignored](../conventions.md) deserves a second look
-for this case — the arrest harvest is over three hours of rate-limited calls, so
-"regenerable" is true in principle and expensive in practice.
+The consequence is about **schema fit, not durability**: the redesign must not
+assume "catalogue = local copy of an enumerable source". A probe catalogue's rows
+record measured facts — coverage, participated population, filings — and a schema
+built for mirrored exports has nowhere to put them.
+
+Durability is already handled. The gitignored build outputs are backed up locally
+and remotely, so the [regenerable-catalogues-are-gitignored convention](../conventions.md)
+stands as written and needs no exception here: losing a probe catalogue is not a
+live risk, even though re-earning one would cost hours of rate-limited calls.
 
 ---
 

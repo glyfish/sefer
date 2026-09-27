@@ -24,7 +24,7 @@ deliberate decision about whether it belongs in the same stores or gets its own.
 | Voteview | Panel → derived series | ✅ Mostly (needs reduction) |
 | Clio-Infra | Time series (historical) | ✅ Directly (Excel loader) |
 | FRED/BLS overlap | — (reconciliation task) | n/a |
-| Polymarket | Ephemeral, high-frequency probabilities | ❌ Different lifecycle |
+| Polymarket | Bounded probability series, each ending in a resolved label | ✅ Mostly — the lifecycle objection was wrong ([research](polymarket-event-probabilities.md)) |
 | LittleSis | Graph (entities + relationships) | ❌ Not time series |
 | Congress.gov | Text + cosponsorship graph | ❌ RAG + graph reduction |
 | Seshat (cliodynamics) | Polities with dated attributes | ❌ Not time series (graph/RAG) |
@@ -131,36 +131,83 @@ republishes selected BIS property-price and credit-gap series.
 
 ## 3. Polymarket
 
-> **Sequenced after Clio-Infra — research-first.** Before building: understand how
-> its markets/prices work and sketch a couple of concrete scenarios where the event
-> probabilities are useful; implement only if it proves easy.
+> **Status: research done (2026-09-26); verdict feasible but narrow.** Full
+> evaluation in
+> [polymarket-event-probabilities.md](polymarket-event-probabilities.md) — the
+> price and its wedges, the census, discovery and monitoring, the schema, a staged
+> plan and what not to build. This entry is the summary; that document is the
+> decision. **Read it before building anything here.**
 
-**Access (partly verified).** Public docs at <https://docs.polymarket.com>, with
-a machine-readable index at `llms.txt`. Read access needs **no authentication**.
-Gamma API (market metadata) and CLOB API (prices, order books), plus official
-Python/TypeScript/Rust SDKs. *Endpoint specifics and rate limits unverified.*
+**Access (verified 2026-09-26).** Public docs at <https://docs.polymarket.com>
+with a machine-readable index at `llms.txt` (13,637 bytes). Read access needs
+**no authentication** — verified on ~25 endpoints across **three** hosts, not
+two: `gamma-api` (metadata), `clob` (prices and order books) and
+**`data-api.polymarket.com/v2`**, which the earlier entry missed and which
+carries the modern price-history route and the authoritative `/v2/resolutions`
+record. **No rate limit is published for public reads** and no rate-limit headers
+are exposed; observed 81–155 req/s across several hundred requests with **zero
+429s**, so politeness rather than quota sets the pace. US reads are permitted and
+verified from a US IP; trading is geoblocked, which is exactly the separation
+worth keeping. Python and TypeScript SDKs ship; the **Rust SDK is "in
+development"**, and a thin `httpx` client is the right choice anyway — the vendor
+SDK pulls `eth-account` and friends, i.e. transaction-signing machinery, into a
+read-only repo.
 
-**Evaluation.** The most *differentiated* candidate — forward-looking implied
-probabilities of future events, which nothing else here provides. Also the worst
-fit for the current architecture.
+**Evaluation.** Still the most *differentiated* candidate — forward-looking
+implied probabilities, which nothing else here provides. **But "worst fit for the
+current architecture" was wrong on storage and understated on horizon.** It is
+among the two or three *easiest* sources in `clients/` — no key, no quota, no bot
+filter, ~400 requests/day, four to six days of work — and it needs **no storage
+strategy at all**: live client plus a file catalogue, no Postgres. What it cannot
+do is reach the few-year horizon the SDT work models.
 
-**Challenges.**
+**What the research corrected.**
 
-- **Lifecycle, not history.** Markets are created, trade, then resolve to 0 or 1
-  and stop. That's not a continuing series; the catalog churns constantly.
-- **Refresh cadence.** Yearly rebuilds are meaningless here. Prices move
-  continuously and a market's interesting window may be days.
-- **Modeling.** A price *is* a probability, bounded 0–1, with a resolution date
-  and criteria. Needs its own schema, not the series/observation model.
-- **The text is the value.** Market questions and resolution criteria are prose,
-  making them a natural RAG target — but they'd need a separate store with an
-  aggressive refresh, not the annual-rebuild catalog.
+- **"Lifecycle, not history" — wrong.** Resolved markets keep a **complete price
+  path permanently at 12-hour granularity**, verified back to 2024-01-26, ending
+  in a terminal tick at the settled value plus an authoritative outcome and a
+  `was_disputed` flag. Every market leaves a bounded ascending `{date, value}`
+  series **with a ground-truth label** — the house shape, plus something the house
+  has never had. The empty-history result that suggested otherwise comes from
+  calling the legacy CLOB route without `fidelity ≥ 720`.
+- **"Refresh cadence" — confirmed and quantified.** Daily-to-weekly is required,
+  and a stale catalogue here does not go quiet, it **lies with a number**: a
+  resolved market still listed as open returns 0.37 for something that settled at
+  1.0. Daily costs ~39 requests.
+- **"The text is the value" — confirmed and sharpened.** The structured
+  `resolutionSource` field a catalog would want carries nothing usable; the entire
+  contract lives in `description` (median 1,155 chars), and it is **rigorous**
+  rather than ambiguous — inclusion lists, exclusion lists, named precedents, a
+  10-day continuity test. It is also the first *vendor-supplied* `definition` in
+  the stack, and it is editable with no upstream history, so **the prose is the
+  thing that must be archived, not the prices.**
+- **"A price *is* a probability" — no.** It is a risk-neutral, fee-distorted,
+  capital-locked, oracle-conditional quote on whether *credible reporting will
+  converge* on X. Politics markets carry a 0.04 taker fee (Geopolitics is
+  fee-free); sub-10¢ purchases lose 19.3¢ per dollar; `liquidityNum`, `volume`,
+  `spread`, `outcomePrices` and `endDate` are each independently unreliable.
 
-Trading later means wallet/auth and a much higher correctness bar; keeping
-read-only strictly separate from any future trading path is worth doing from the
-start.
+**What kills it as an SDT driver.** At the horizons this project models the prices
+are **quoted, not traded**: across the 40 highest-liquidity open geopolitics
+markets resolving beyond 180 days, median executable depth within 1¢ is **$199**
+bid / **$495** ask and **0 of 33** two-sided books clear $10k on the ask; the only
+multi-year conflict term structure on the platform (four Russia–Ukraine 2027
+rungs) carries **$818–$3,018** of lifetime volume each. There is **no published
+calibration evidence beyond one month from any source**, and at one month the one
+cross-venue study puts Polymarket last of four. **17 CFR 40.11(a)(1)** confines
+war contracts to the offshore venue permanently — fine for reading, which is the
+use case.
 
-**Value:** high but distinct. **Effort:** high — needs its own storage strategy.
+**Build, if anything:** the **labelled calibration corpus** from the 2,112 closed
+geopolitics events (permanent, free, a few hundred requests, and it decides
+whether to trust anything else), then a hand-curated **≤6-month watchlist** on a
+*computed* depth floor as narrative context. **For macro forward probabilities,
+Kalshi is the better answer** — its contracts settle against the BLS and FRED
+prints meida already ingests.
+
+**Value:** high but narrow — a short-horizon expectation signal and a calibration
+corpus, not a structural driver. **Effort:** low for the client and catalogue
+(4–6 days); the work is the filtering, not the plumbing.
 
 ---
 
@@ -498,9 +545,11 @@ the sequence below is the working roadmap.
    **Clio-Infra is now the front of the queue.**
 3. **Clio-Infra** — historical backbone (real wages, inequality, life expectancy,
    ~1500→). Excel loader, no API. *(easy)*
-4. **Polymarket** — **research first**: understand how its markets/prices work and
-   sketch a couple of concrete scenarios where the event probabilities are useful;
-   implement only if it proves easy. Pulled up from the Other tier (§3).
+4. **Polymarket** — **researched, 2026-09-26**: feasible but narrow, and narrow for a
+   different reason than expected — the prices at a multi-year horizon are quoted
+   rather than traded (median executable depth $199 bid within a cent). Build the
+   labelled calibration corpus and a short-horizon watchlist; not an SDT driver.
+   See [polymarket-event-probabilities.md](polymarket-event-probabilities.md) and §3.
 
    → **Milestone:** with CDC + Voteview + Clio-Infra + Polymarket there is enough
    data to stand up the **trading analysis pipeline (yada)** and begin the **SDT
@@ -524,7 +573,7 @@ the sequence below is the working roadmap.
 | **Demographic (SDT)** | Clio-Infra | historical backbone (§9); Excel loader, no API |
 | **Demographic (SDT)** | FBI Crime Data Explorer | **done** — live client + catalog; supplies the instability outcome *and* enforcement stance (clearance rates) and capacity (officer counts) |
 | **Demographic (SDT)** | Congress.gov | cosponsorship + Record text + policy→sector; key + graph/NLP — **lit review first** |
-| **Other** | Polymarket | forward-looking event probabilities; **research first**, after Clio-Infra (§3) |
+| **Other** | Polymarket | forward-looking event probabilities; **researched** — feasible but narrow, calibration corpus first ([research](polymarket-event-probabilities.md), §3) |
 | **Other** | LittleSis | corporate/ownership graph; **lit review first** (§4) |
 | **Other** | Seshat (cliodynamics) | separate research project (§6) |
 | **Other** | CMS (Medicaid · ACA · NHE) | 3 series only; no client needed — **mostly skip** (§10) |

@@ -35,7 +35,7 @@ discovery, plots). No navi or alef work.
 | Tiingo | 2 | 2 | — (no catalogue exists) |
 | BLS | 5 | 0 | 288,085 |
 | BIS | 3 | 0 | 26,902 |
-| FBI | 3 | 0 | 1,150 catalogued — a deliberate slice, see §2 |
+| FBI | 3 | 0 | **3,886** catalogued — a deliberate slice, see §2 |
 | CDC | 6 | 0 | 2,346 live Socrata |
 | `timeseries_source_*` | 3 | 0 | **11,621 stored** |
 | `series_catalog_*` | 3 | 0 | **13,967 catalogue entries** |
@@ -138,9 +138,30 @@ across the eleven export files:
   **five hand-picked agency ORIs** (`NY0303000`, `ILCPD0000`, `DCMPD0000`,
   `PAPEP0000`, `CA0194200`).
 - **`count` only** — no `rate` variants, though the tools serve them.
-- **Offences and clearances only** — employment covers just five scopes, and
-  **arrests are not catalogued at all**. A harvest of 2,736 code × scope pairs is
-  running as this is written and will add them.
+
+The arrest harvest landed on 2026-09-27, taking the catalogue from 1,150 to
+**3,886 entries** (48 arrest codes × 57 scopes, in 48 files, plus the original 11).
+Three code × scope pairs were still pending, so a re-run completes them.
+
+That makes FBI the **best-shaped catalogue in the system**: 3,886 of 3,886 carry a
+`retrieval` block and a `definition`, and `is_active` is meaningfully populated —
+3,628 true against 258 false, where `is_active = false` corresponds exactly to
+`empty = true` (258 of 258, no mismatches). "Vermont files no gambling arrests" is
+now distinguishable from "nobody harvested gambling."
+
+**Two gaps stand between the files and `series_catalog`**, which still holds zero
+`fbi` rows:
+
+1. **The field is `definition`, not `description`.** `load_catalog._row()` reads
+   `entry.get("description")`, so a load today silently drops all 3,886 per-code
+   trap notes. One line, in the exporter or the loader.
+2. **The probe measurements have no column.** Entries carry
+   `coverage_mean_percent`, `coverage_min_percent`, `participated_population`,
+   `filings`, `arrests_total`, `blank_month_notices` and `sources`; the table has
+   none of these. This is the mirror-versus-probe distinction made concrete — the
+   schema was designed for catalogues that mirror an enumerable source, and the
+   facts that cost an API call each to learn would be discarded on load. Either add
+   columns or fold them into `facets`, but decide before loading rather than after.
 
 ### Agency scope, and why its catalogue cannot be an enumeration
 

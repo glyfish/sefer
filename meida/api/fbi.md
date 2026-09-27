@@ -799,8 +799,9 @@ exceptionally; the month is the **incident** month, never the arrest's; rape is
   9, 22 and 12 incidents in 2023, 2024 and 2025 — **28 offence-incident rows of
   762,171** across the three years (6, 15 and 7), against 259,363 cleared by
   arrest. Nashville sets one on **4,010 rows of 108,943 (3.7%)**, which the
-  module records as 9.0–9.5% of *incidents* (the denominators differ: an incident
-  need carry none of the eight offences). So an NYPD plot shows arrest against
+  module records as **9.0–9.5% of *incidents*** — the two denominators differ,
+  because an offence-incident row exists only where the incident carries one of
+  the eight offences and many carry none. So an NYPD plot shows arrest against
   not-cleared and the A–E bands are invisible. **That is how NYPD reports, not
   missing data.** Nashville's are not spread evenly either: code D, "victim
   refused to cooperate", is 1,140 of its 1,358 exceptional rows in 2023, and code
@@ -828,7 +829,7 @@ dated in the file's year, with a row that is not raising rather than landing
 silently in the wrong year.
 
 `clearance_by_reason(ori, years)` returns every (year, month, offence, reason)
-cell including zeros, so a missing row never stands in for one, and raises
+cell including zeros, so a missing row never stands in for a zero, and raises
 `UnknownAgency` or `NoIncidents` rather than returning a year of zeros.
 `pooled(cells)` gives incidents and shares by reason per offence.
 
@@ -926,7 +927,7 @@ ask questions of the data. Call counts are each notebook's own.
 | `api.ipynb` | what one call returns, the coverage series by year, the traps demonstrated live, the agency registry | a handful |
 | `catalog.ipynb` | the request vocabulary, the five cities, the harvest, the export, coverage as a catalog field | the harvest |
 | `client.ipynb` | `FbiClient` on one department: ORI discovery, one request's four series, the clearance rate, officers, crime against capacity — and the filing schedule under Washington's 1993-1997 clearances, which is where the rule started | 3 |
-| `mcp.ipynb` | the tools as a model sees them, over `{period: value}` dicts, with `utils/mcp.py`'s first-version rule | a handful |
+| `mcp.ipynb` | **two** of the three tools as a model sees them, over `{period: value}` dicts, with `utils/mcp.py`'s first-version rule. Not brought level with the arrest route | a handful |
 | `walkthrough.ipynb` | **eight scopes**: homicide per 100,000, clearance rates, arrests, officers per 100,000, and §5's test of whether each city breaks at its own conversion date | 39 |
 | `enforcement.ipynb` | six arrest codes at six scopes, clearance reasons from the NIBRS files, and §3 on the filing schedule underneath the arrest series | 49 |
 | `withdrawal.ipynb` | recorded crime as a report count: four instruments, the statutory trap, and the external check against death certificates | 96 |

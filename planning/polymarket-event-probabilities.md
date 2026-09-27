@@ -1213,7 +1213,11 @@ not, and the finer data is the one thing that cannot be backfilled.
   its event's most liquid.
 - **`spread`** — Gamma reports 0.001 on books with no bid at all.
 - **`volume` / `volumeClob`** — identical to each other, uncheckable, and 88% of a
-  flagship event's is in sub-2¢ outcomes (§1).
+  flagship event's is in sub-2¢ outcomes (§1). *As a level. As a floor it is the
+  best filter measured — see §1.8, and do not collapse the two claims.*
+- **The last point of a stored price path, as a label** — it disagrees with the
+  settled outcome on **26.9%** of paths (*measured*). `/v2/resolutions` is the
+  label; the path is the history.
 - **`outcomePrices`** — present on only **646 of 848** markets (76%), CDN-stale up
   to five minutes, and demonstrably wrong on markets with no bid. Fields are
   **omitted, not null**, so the pydantic models need `Optional` with defaults, not
@@ -1452,7 +1456,9 @@ series for conflict terms yields 444 hits that are almost entirely false
 positives ("Critics Choice", sports "strikes"). The genuine items are policy and
 diplomacy — `KXSANCTIONRUSSIA`, `KXUSAIRANAGREEMENT`, `KXTRUMPVISITISRAEL`; its
 "World" category (143 series) is weather, reverse repo and papal conclaves. §2
-explains why: 17 CFR 40.11(a)(1) forbids it.
+explains why: 17 CFR 40.11(a)(1) forbids it. **Confirmed at corpus scale**
+(*measured*): the absence was re-established by searching **105,205 contract
+texts**, not a series list. The consequence of a war is listable; the war is not.
 
 **So the split is clean, with one line of it redrawn.** Macro forward probabilities →
 Kalshi. US elections → **Kalshi**; ~~or PredictIt~~ — PredictIt can hold a live

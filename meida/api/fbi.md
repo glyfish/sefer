@@ -833,6 +833,46 @@ cell including zeros, so a missing row never stands in for a zero, and raises
 `UnknownAgency` or `NoIncidents` rather than returning a year of zeros.
 `pooled(cells)` gives incidents and shares by reason per offence.
 
+### What else is in `agencies.csv`, and nothing reads
+
+`nibrs.py` reads four columns of `agencies.csv` — `ori`, `agency_id`,
+`pub_agency_name`, `nibrs_start_date`. It has **59**, read off TN-2024 and
+NY-2023 on 2026-09-26. Three groups of them answer questions this page otherwise
+records as gaps:
+
+- **`male_officer`, `female_officer`, `male_civilian`, `female_civilian`,
+  `officer_rate`, `employee_rate`, `pe_reported_flag`, `population`.** The
+  employment data, for **every listed agency in one download**, where
+  `pe/agency/{ORI}` is one call per agency and `pe/national` answers with nulls
+  (trap 2). TN-2024 lists 395 agencies, 381 of them with `pe_reported_flag = Y`;
+  NY-2023 lists 183 and 174. **The figures agree with the API**: Nashville
+  `TN0190100` reads 1,341 male + 199 female = 1,540 officers over a population of
+  698,987 = **220.3 per 100,000**, against the **220** `fbi_employment` gives for
+  2024 in `walkthrough.ipynb` §4. So a state's NIBRS staffing panel is one
+  download rather than 395 calls — for NIBRS-participating agencies in NIBRS
+  years only, which is the whole limitation.
+- **`participated` and `nibrs_participated`.** Named exactly for the evidence the
+  blank-month rule has to infer, and they do not supply it: both are `Y` in
+  **all 395** TN-2024 rows and **all 183** NY-2023 rows. The file's own
+  membership is the signal, not the column, and it is per agency-**year** rather
+  than per month, so it still cannot say which months a listed agency filed.
+- **`nibrs_leoka_start_date`, `nibrs_cert_date`, `nibrs_ct_start_date`,
+  `nibrs_multi_bias_start_date`, `nibrs_off_eth_start_date`, `dormant_flag`,
+  `dormant_year`, `agency_status`, `reporting_type`, `covered_by_legacy_ori`,
+  `legacy_ori`, `summary_rape_def`, `county_name`, `msa_name`.** **Six** dated
+  conversion fields rather than the one the CDE registry carries, and they
+  disagree: Nashville certifies 1996-07-01, starts NIBRS 1999-10-01, adds LEOKA
+  2004-06-01, offender ethnicity 2013-04-01, cargo theft 2013-01-01 and
+  multiple-bias 2015-06-01, while New York certifies 2019-01-01 and dates all five
+  others 2023-01-01. So "the conversion date" is six dates for one agency and the
+  registry's `nibrs_start_date` is one of them. `dormant_flag` (`N` for both) is
+  the closest thing anywhere in this integration to a statement that an agency
+  stopped. `summary_rape_def` is **empty** in both rows checked, so what it holds
+  is unverified.
+
+None of this is read today and none of it is on this page's evidence base
+elsewhere. It is the cheapest open lead here: the six zips are already cached.
+
 **What this makes visible and no tool does.** A department reporting 40% cleared
 may be reporting 40% arrested, or 28% arrested and 12% closed because a victim
 withdrew, and `fbi_offenses` returns the same number in both cases. For these two
@@ -1017,20 +1057,38 @@ and regenerable** — but not equally cheap: `data/raw/agencies.json` is 51 call
 - **No descriptions.** The 21 buckets exist; `descriptions.yaml` does not.
 - **The catalog's five cities and the notebooks' eight scopes do not
   intersect fully** — see [The catalog](#the-catalog).
-- **Three documented routes are unprobed**, and one of them is the only live
-  route carrying a clearance *type*:
-  - `nibrs-estimation` — the spec documents it and it is the one API route that
-    would give clearance by reason without downloading the incident files.
-    **Unprobed.**
+- **Three further CDE routes are named in the service's own documentation and
+  have never been probed here.** Nothing in `clients/`, `mcp_server/` or the
+  notebooks mentions any of them, so *that they are documented* is carried from
+  the CDE's docApi spec and **is not re-verified on this pass**; that they are
+  unprobed is verified, by their absence from the code.
+  - `nibrs-estimation` — the only live route said to carry a clearance **type**,
+    i.e. clearance by reason without downloading the incident files. Probing it
+    would make `utils/nibrs.py`'s 307 MB of zips unnecessary for that one
+    question, or establish that it will not.
   - `participation` — would say whether a given agency filed in a given period,
-    which is exactly the evidence the blank-month rule has to infer. **Unprobed**,
-    and the single highest-value gap on this page: it would settle at agency scope
-    what coverage cannot.
-  - `shr` — the Supplementary Homicide Report, i.e. expanded homicide with
-    victim/offender relationship and circumstance. **Unprobed.**
-- **LEOKA is not in this API at all.** Officers killed and assaulted is a separate
-  UCR collection with no CDE route found. Neither is anything before 1985.
-  Both belong to [fbi-historical.md](fbi-historical.md), the companion page.
+    which is exactly the evidence the blank-month rule has to infer and the one
+    thing coverage cannot supply at agency scope. **The highest-value unprobed
+    route on this page**, and the incident files do *not* substitute for it: their
+    `participated` column is `Y` for every listed agency and is annual (see
+    [`agencies.csv`](#what-else-is-in-agenciescsv-and-nothing-reads)).
+  - `shr` — the Supplementary Homicide Report: expanded homicide with
+    victim/offender relationship and circumstance.
+- **LEOKA is not on any probed API route, but it is in the incident files.**
+  Officers killed and assaulted is a separate UCR collection and no CDE route for
+  it has been found or probed here; `agencies.csv` nonetheless carries
+  `nibrs_leoka_start_date` per agency-year (Nashville 2004-06-01, New York
+  2023-01-01), so the collection's per-agency start dates are already on disk
+  while the counts are not. Nothing before 1985 is in the API at all — `pe`
+  refuses it outright ("Please enter a from year greater than 1984") and the
+  monthly routes begin there. Both belong to
+  [fbi-historical.md](fbi-historical.md), the companion page.
+- **A state's NIBRS staffing panel is one download and is not taken.**
+  `agencies.csv` carries male/female officer and civilian counts for every listed
+  agency, agreeing with `fbi_employment` where checked, against one `pe` call per
+  agency today — see
+  [`agencies.csv`](#what-else-is-in-agenciescsv-and-nothing-reads). NIBRS
+  participants in NIBRS years only.
 - **Agency coverage is the state's** (trap 6), unlabelled as such in the catalog.
   The tools do say so; the catalog has no field for it.
 - **`FbiSeries.measure` is `"value"` for population and coverage.** The field's

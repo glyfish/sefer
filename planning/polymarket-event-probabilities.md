@@ -98,9 +98,10 @@ verification pass**. Markers:
   by an adversarial verifier reading the raw files. Reproducible offline; no
   network call re-runs it.
 - *this revision, single pass* — derived from the corpus files for this revision
-  only, by one pass, and **not** re-derived by anyone else. Three figures carry
-  this marker; treat them as provisional in exactly the way the *single pass* rows
-  below are.
+  only, by one pass, and **not** re-derived by anyone else. Four findings carry this
+  marker (the untraded quarter and its base rate, `resolution_source` retention, and
+  the discount's share of the horizon gap); treat them as provisional in exactly the
+  way the *single pass* rows below are.
 - *single pass* — measured once against the live API, not re-tested. Probably
   right; not corroborated.
 - *documented only* — the vendor's docs say it; nobody called it.
@@ -189,7 +190,7 @@ the research run only sampled.
 | §1 — "**never** use `volume` or `liquidity` as a quality filter" | Right about the *number*, wrong as an instruction. `volume_num` is the strongest honest discriminator measured: standardised \|bias\| **15.9pp in its bottom quintile against 0.05pp in its top** at 30–180 days, ρ −1.00 across all five bins, **+0.1pp above $1M**. What it separates is markets that traded from markets that did not. Use it as a **floor**, never as a ranking, and never read its magnitude as depth | ***REFUTED as stated*** |
 | §1 — "Use `openInterest` and depth you compute yourself" | Backwards for Polymarket, right for Kalshi. Polymarket's retained `event_open_interest` does **nothing** (−0.5pp at 30–180 days, +0.9pp beyond, ρ +0.5 then −0.5). Kalshi's `peak_open_interest` cuts bias **12.2pp** at range — but only because it is recovered from the candle path: the settled market row reads zero on **3,732 of 4,369** markets, so a screen reading OI off the row scores every settled market on the venue as having attracted no interest | ***HALF REFUTED*** |
 | §4/§5 — a resolved market's path terminates "in a tick at the settled value" | **26.9%** of stored daily paths disagree with the settled value (14,825 of 55,158). The resolving move usually lands inside one bucket and the daily print misses it. **Take the label from `/v2/resolutions`, never from the last price** | **CORRECTED** |
-| Verdict — "every market leaves a bounded `{date, value}` series" | **17,605 of 72,838** closed markets (24.2%) return no stored daily path at all — and they are not the short-lived ones. Their median life is **42 days** (p90 194) against 10 days for the markets that do have a path; their median reported volume is **$0**, 88.8% are at zero or absent, and the order book was enabled on 17,598 of them. No trade, no forward-filled series: the mechanism is absence of trading, not absence of retention *(this revision, single pass)* | **CORRECTED** |
+| Verdict — "every market leaves a bounded `{date, value}` series" | **17,605 of 72,838** closed markets (24.2%) return no stored daily path at all — and they are not the short-lived ones. Their median life is **42 days** (p90 194) against 10 days for the markets that do have a path; their median reported volume is **$0**, 88.8% are at zero or absent, and the order book was enabled on 17,598 of them. No trade, no forward-filled series: the mechanism is absence of trading, not absence of retention. And the missing quarter is the **dead** quarter — it settles YES **6.3%** of the time against **25.2%** for the markets that do have a path, so a price-path corpus drops legs that were never going to happen *(this revision, single pass)* | **CORRECTED** |
 | §5 — the structured `resolutionSource` field "carries nothing usable" | It is non-empty on **12,728 of 72,838** closed markets (17.5%), with only **117 distinct values**, 12,478 of them deep links: `x.com/elonmusk` (4,844 markets), a WTI price app (1,671), `truthsocial.com/@realDonaldTrump` (726), `x.com/khamenei_ir` (707), `tsa.gov` passenger volumes (617). It is populated where the source is a **feed** and absent where the contract needs a judgement — on the geopolitics tag it is **52 of 7,928** markets. So: a hint on a sixth of the book, near-useless on this project's sixth *(this revision, single pass)* | **CORRECTED** |
 | §1.7 — correct with "a longshot haircut below ~10¢ (≈ ×0.8)" | The haircut is aimed at the wrong part of the book. The published −19.3¢/$ reproduces at **−19.6%** in the 5–10¢ band, but that is a **return on an absolute gap of 1.38¢**; below 2¢ the gap is **0.23¢** and the ratio −51.9%. The largest *absolute* mispricing is **25–50¢**, on both large venues independently: **+9.21¢** Polymarket, **+6.70¢** Kalshi. And it is a horizon interaction, not a price effect: +2.10¢ intraday → +11.86¢ at 7–30 days → **+24.40¢** at 180–365 days on Polymarket, and −8.03¢ → **+21.72¢** on Kalshi, a sign flip. **A flat haircut is the wrong instrument** | **CORRECTED** |
 | §1.1 — the "X by *date*" ladders are cumulative | Five kinds, not one, across **3,787** ladders detected in the closed corpus. And a by-date ladder is a CDF **only for an absorbing event**: **63 of 1,034** settled non-monotonically, YES at one deadline and NO at a later one, because for a recurring event the re-issues are *rolling* windows rather than nested ones | **CORRECTED** |
@@ -918,6 +919,11 @@ Both measured across the 72,838-market closed harvest:
    enabled on 17,598 of them. The `p` series is a forward-filled last trade, so a
    market that never traded leaves no series to forward-fill *(this revision, single
    pass)*. The retention promise is intact; the **coverage** promise was too strong.
+   **And the missing quarter is the dead quarter**: it settles **YES 6.3% of the
+   time** (1,066 of 16,959) against **25.2%** for the markets that do have a path
+   (13,909 of 55,158), so what a price-path corpus drops is overwhelmingly legs that
+   were never going to happen — a selection that matters for a count of the book and
+   barely at all for a calibration measurement *(this revision, single pass)*.
 
 | Granularity | Retention | Status |
 | --- | --- | --- |
@@ -1110,8 +1116,10 @@ observation is **not** the settled value on 26.9% of paths, so the label comes f
 "every market leaves a series" is true of 76% of the closed political and macro book
 and false of the rest — which for a corpus builder is a **selection** to state
 rather than a defect to fix: what is archivable here is the traded subset, and the
-untraded quarter is missing not at random. Everything measured in this document is
-measured on markets that traded.
+untraded quarter is missing not at random — measured, it settles YES 6.3% of the time
+against 25.2% for the traded set, so it is the dead legs that are missing rather than
+the contested questions. Everything measured in this document is measured on markets
+that traded, and that is a smaller caveat than it first looks.
 
 A multi-year view of one question means **splicing successive re-issues** — the
 same problem as the 2021 NIBRS break and Clio-Infra's historical-border joins,
@@ -1502,7 +1510,7 @@ answered as permanently unanswerable, and six new ones arrived with the corpus.*
 | 8 | **Are there markets on US domestic instability** — political violence, protest scale, state capacity? | **Open.** The 58-tag harvest registry contains no such concept, which is weak evidence of absence rather than a search | One targeted `/public-search` and tag sweep |
 | 9 | **Is the market *set* itself the better SDT variable?** | **Open, and strengthened.** The venue serves the object directly: **127 `recurrence_panel` ladders / 1,686 rungs** are the same question re-asked per period, which is a hazard-rate series and a conflict-intensity series in its own right rather than a distribution | Still needs archived daily catalogues for a history — the argument for starting the Stage 4 snapshot early, now with a named object to count |
 | 10 | **Can reported volume ever be cleaned?** | **Open, and largely moot.** Not from the API, and it does not matter: volume works as a **floor** without being interpretable as a level | Trade-level on-chain Polygon data. Out of scope |
-| 11 | **Does the untraded quarter bias the corpus?** **17,605 of 72,838** closed markets (24.2%) left no price path because nobody traded them, and they lived a median 42 days | **New, and the largest unqualified caveat on every measurement here** — all of it is conditional on a market having traded | Their settled outcomes *are* retrievable, so the base rate of the untraded set is computable without a price: compare it against the traded set's, and the selection's direction becomes visible |
+| 11 | **Does the untraded quarter bias the corpus?** **17,605 of 72,838** closed markets (24.2%) left no price path because nobody traded them, and they lived a median 42 days | **New, and mostly answered on the spot — in the reassuring direction.** Their settled outcomes *are* retrievable without a price: the untraded set settles **YES 6.3% of the time** (1,066 of 16,959) against **25.2%** for the set with a path (13,909 of 55,158). What is missing is the dead legs, not the contested questions *(this revision, single pass)* | What remains is the residual: whether any untraded market was one a reader would have wanted a price for. A sample of a few dozen questions read by hand settles it, and the base rate says not to expect much |
 | 12 | **Is Kalshi's calibration advantage real or an artefact?** It is better at every horizon, with three confounds: a liquidity-stratified sample against a near-population one, a live mid against a stale forward-filled print, and two different "macro" populations | **New.** The advantage survives a matched stratum and a price-basis check, so it is *probably* real | An unstratified Kalshi pull, which is ~100,000 candle paths rather than 4,393 |
 | 13 | **Do the metric floors transfer?** Every threshold in §1.8 is in-sample on a settled corpus whose quintile boundaries the data chose | **New, and it blocks using any exact cut** | Re-derive on a held-out period — the corpus already spans 2021–2026, so a temporal split costs nothing but the rerun |
 | 14 | **What did `KXCPIYOY-25OCT` settle on?** The October 2025 CPI-U was never published and the contract settled on 3.3 anyway | **New.** Recoverable from no API; the filed contract-terms PDF governs | Read the `contract_terms_url` PDF. It is also the test case for what a shutdown does to any macro join |

@@ -172,6 +172,14 @@ what determine the design:
    have the field. It arrives on each *series* response instead, so ranking
    departments by size costs one call per candidate.
 
+   That call is not narrow, though. A `summarized/agency/{ORI}` response carries
+   the agency's population and its state's, both participated populations, the
+   coverage percentage, and the filed date range — so **one call completes the
+   whole assessment**, not just the size check. Rank from these rather than from
+   an external source such as Census: the response's population is the same
+   number the rates divide by, and a different denominator would make selection
+   and rate silently inconsistent.
+
 **The binding constraint is size, not availability**, and neither size nor real
 coverage can be read from the registry. So discovery here is not search over a
 table and not generation from a pattern — it is **measurement**. The practical

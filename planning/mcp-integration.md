@@ -142,18 +142,62 @@ across the eleven export files:
   **arrests are not catalogued at all**. A harvest of 2,736 code × scope pairs is
   running as this is written and will add them.
 
-The dimension that is missing is the one the research wants. The CDE registry
-holds **19,636 agencies, 11,784 of them city departments**, and the
-enforcement-cycle work needs a *city* panel of offences against officers per head.
-Fully enumerated, agency scope is roughly 19,636 × 10 offences × 2 measures ≈
-**390,000 series** — larger than the FRED catalogue, for one source.
+### Agency scope, and why its catalogue cannot be an enumeration
 
-**So the FBI is the source where enumeration stops being the right model.** Its
-discovery has to be *generative*: search the agency registry, then construct the
-`retrieval` block from the chosen ORI, rather than pre-catalogue the cross
-product. That distinction should be settled in the document-store redesign, and
-it is a second argument — beside scale — against assuming every source's
-discovery is a table of rows.
+The registry holds **19,636 agencies** (verified in `raw/agencies.json`):
+
+| Type | Count |
+| --- | --- |
+| City | 11,784 |
+| County | 3,029 |
+| Other state agency | 1,382 |
+| Other | 1,296 |
+| State police | 971 |
+| University or college | 956 |
+| Tribal | 218 |
+
+Every one is addressable — offences, clearances, arrests and employment all take
+an ORI — so the cross product is roughly **390,000 series**, larger than the FRED
+catalogue for one source. But three facts shrink the *useful* number, and they are
+what determine the design:
+
+1. **Addressable is not filed.** Washington filed no arrests for twenty-five
+   years; New York filed homicides quarterly for a decade. A response comes back
+   looking complete when a department has stopped filing — which is why the
+   blank-month rule exists. **Real coverage is only learnable by fetching.**
+2. **Small departments give unusable series.** San Jose, at a million people,
+   records 26 homicides a year — already small-count territory. Most of the 11,784
+   cities are far smaller, so their monthly series are mostly zeros with no signal.
+3. **The registry carries no population** — confirmed: zero of the 19,636 records
+   have the field. It arrives on each *series* response instead, so ranking
+   departments by size costs one call per candidate.
+
+**The binding constraint is size, not availability**, and neither size nor real
+coverage can be read from the registry. So discovery here is not search over a
+table and not generation from a pattern — it is **measurement**. The practical
+route is to probe once and reuse: the catalogue's five ORIs and the walkthrough's
+seven were chosen that way, and a reasonable next tier is the fifty or hundred
+largest departments, discovered once and then kept.
+
+### Two kinds of catalogue, and the redesign should not conflate them
+
+This makes the FBI catalogue a different object from the others, and the
+distinction generalises:
+
+| | **Mirror catalogue** | **Probe catalogue** |
+| --- | --- | --- |
+| Sources | FRED, BLS, BIS, Clio, CDC Socrata | FBI at agency scope |
+| The source can enumerate | yes | no, not usefully |
+| A row records | what the provider says exists | what fetching *revealed* — real date range, coverage, population |
+| Cost to regenerate | a bulk download | one rate-limited call per row |
+| If lost | re-export | re-measure, over hours, against a key that can lock out |
+
+Two consequences. The redesign must not assume "catalogue = local copy of an
+enumerable source"; a probe catalogue is closer to primary data than to build
+output. And the convention that
+[regenerable catalogues are gitignored](../conventions.md) deserves a second look
+for this case — the arrest harvest is over three hours of rate-limited calls, so
+"regenerable" is true in principle and expensive in practice.
 
 ---
 
@@ -345,6 +389,10 @@ Recorded here so the integration work does not pre-empt them.
      lacks `retrieval`, and BLS/BIS/FBI lack `description` — so consolidating
      them means synthesising a retrieval block per source, not just loading rows.
      The FBI's already has one; the others do not.
+  3. **Whether a probe catalogue belongs in the same table as a mirror
+     catalogue** (§2). They differ in how rows come to exist, what a row means,
+     and what losing one costs. The same row shape may still serve both — but
+     that should be decided, not inherited.
 - **Is the ETF store the outlier?** Probably, and for a structural reason: it is
   not a series catalogue but instrument metadata, and 67% of its 36,475 documents
   are German regional venue duplicates of US listings.

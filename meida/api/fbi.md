@@ -5,26 +5,31 @@ offences and clearances at three geographic grains, monthly arrests for all
 offences together or for any one of 47 arrest codes, annual police employment at
 one grain, and the metadata catalog built out of those same calls. Built and in
 use — `FbiClient` and its models in `clients/`, three MCP tools, the export in
-`notebooks/fbi/utils/catalog.py`, seven notebooks, and a suite of 866 tests.
+`notebooks/fbi/utils/catalog.py`, seven notebooks, and 313 FBI tests inside a
+suite of 915.
 
 **Every figure below names what established it** — a live probe and its date, a
 saved payload, the exported catalog, a test, or a module docstring. Anything not
 established that way is marked **unverified**. Figures that move — counts,
 coverage, catalog sizes — carry the date they were checked.
 
-**Where this stands, as of 26 September 2026.** `fbi_offenses`, `fbi_arrests`
+**Where this stands, as of 11 October 2026.** `fbi_offenses`, `fbi_arrests`
 and `fbi_employment` are defined in `mcp_server/server.py` and served, and every
 catalog entry's `retrieval` block names one of them. The work is committed — nine
 commits, meida `87f0dc3` (2026-09-21) through `c53e272` (2026-09-26): the client,
 catalog and first five notebooks on the 21st, then the arrest route
 (`317cf56`), one filing rule plus the NIBRS reader (`25281d6`),
 `enforcement.ipynb` (`4875ff9`), the eighth scope (`34adf90`) and
-`withdrawal.ipynb` (`c53e272`) on the 26th. The catalog is **not**
+`withdrawal.ipynb` (`c53e272`) on the 26th. Two later commits changed the
+catalogue — `f6520df` "The arrest route reaches the catalogue" (the harvest and
+its 2,736 entries) and `f107804` (the `definition`/`description` fix) — and a
+third, `49122cc`, moved the repo to mcp 2.x, which renamed the response field
+every notebook util reads. The catalog is **not**
 loaded into `series_catalog` and is not meant to be: a live API source keeps its
 catalog as files for the document store, and Postgres holds only the sources
-whose observations are stored. The catalog's 1,150 entries are state-grain
-offences and employment only — it predates the arrest route and holds no arrest
-series.
+whose observations are stored. The catalog holds **3,886 entries**: 1,140
+offence, 10 employment, and 2,736 arrest, the last added by the harvest of
+2026-10-11.
 
 The FBI fills the **enforcement** leg: crime and the police staffing that
 responds to it, for the same department, from one source. That pairing is why
@@ -893,24 +898,39 @@ offence rewrites one file and the diffs stay readable. Police employment is a
 separate family — annual, agency-scoped, different facets — and gets its own
 file.
 
-Counted from the files as they stood on disk on 2026-09-26 (written 2026-09-20;
-unchanged since, and the arrest route has not been catalogued):
+Counted from the files as they stood on disk on 2026-10-11 (offences written
+2026-09-20 and unchanged since except for the description fix; arrests harvested
+2026-10-11):
 
 | File | Entries |
 | --- | --- |
 | `fbi_series_{violent_crime, homicide, rape, robbery, aggravated_assault}.yaml` | 114 each |
 | `fbi_series_{property_crime, burglary, larceny, motor_vehicle_theft, arson}.yaml` | 114 each |
 | `fbi_series_employment.yaml` | 10 |
-| **total** | **1,150 across 11 files** (≈934 KiB) |
+| `fbi_series_arrests_{011…330, all}.yaml` | 57 each, **48 files** |
+| **total** | **3,886 across 59 files** (≈6.8 MiB) |
 
 114 is **57 scopes × 2 measures**: the nation, 51 states, and five city
 departments — Washington `DCMPD0000`, New York City `NY0303000`, Chicago
 `ILCPD0000`, Los Angeles `CA0194200`, Philadelphia `PAPEP0000`. That splits
-1,040 national-and-state entries, 100 city entries and 10 employment entries;
-110 entries are agency-scoped and carry `nibrs_start_date`. Every entry is
-`unit: count`; the rate series are fetched, not catalogued, since a rate is
-recomputable from the count and the population. 1,140 are Monthly and 10 Annual,
-all starting 1985-01-01, all carrying vintage `09/2026` and refresh `09/15/2026`.
+1,040 national-and-state entries, 100 city entries and 10 employment entries.
+57 is the **same scope list** the arrests use, where it is 57 × 1 — the route
+serves one catalogable measure, not two — giving 48 × 57 = **2,736**. Across
+both, **350 entries are agency-scoped and carry `nibrs_start_date`**, 110
+offence-and-employment and 240 arrest; it is a **top-level** field, not a facet.
+
+Every entry is `unit: count`; the rate series are fetched, not catalogued, since
+a rate is recomputable from the count and the population. 3,876 are Monthly and
+10 Annual, all carrying vintage `09/2026` and refresh `09/15/2026`. The spans
+differ by route: offences and employment all start 1985-01-01, arrests at
+2018-01-01 or later — the earliest the arrest route serves, and later still
+where an agency joined after it.
+
+**258 arrest entries are `is_active: false`** and carry `empty: true`: the code
+is served at that scope but every month of it is unfiled. They are kept rather
+than dropped because their absence is the finding — an entry that says "this
+offence has no arrests in this jurisdiction" answers a question that a missing
+entry only raises.
 
 **The five cities are not the notebooks' eight scopes**, and neither list is the
 other's superset. The catalog has Chicago and Philadelphia, which no notebook
@@ -924,15 +944,21 @@ reads; `walkthrough.ipynb` and `withdrawal.ipynb` read San Francisco
 | --- | --- |
 | **the payload** | `observation_start`/`_end`, `coverage_mean_percent`, `coverage_min_percent`, `sources[].vintage` and `.refreshed`, and `facets.geography` — an ORI resolves to the department's own name |
 | **the request** | `series_id`, `concept`, `title`, `unit`, `frequency`, `facets.scope`/`offense`/`measure`, `retrieval` |
-| **the agency registry** | `facets.agency_type`, `facets.state`, `facets.county`, and `nibrs_start_date` — present on the 110 agency-scoped entries only |
-| **written by hand** | `definition`, from `OFFENSE_NOTES` and `MEASURE_NOTES`. The API has no dictionary, and what a clearance means (arrest *or exceptional means*), which rape definition applies, what `property-crime` excludes, are the caveats people miss |
-| **generated later** | `description`, by `db_import.descriptions` — **21 buckets** here (counted from the files 2026-09-26), against CDC's two and a half thousand series. Not yet generated: there is no `descriptions.yaml` under `notebooks/fbi/data/` |
+| **the agency registry** | `facets.agency_type`, `facets.state`, `facets.county`, and top-level `nibrs_start_date` — present on the 350 agency-scoped entries only |
+| **the arrest payload only** | `participated_population`, `filings`, `arrests_total`, `empty`, `blank_month_notices` — on the 2,736 arrest entries. The first three are what [the quality-fields CR](../series-catalog-quality-fields.md) exists to carry into Postgres; `load_catalog._row()` discards all five today |
+| **written by hand** | `definition`, from `OFFENSE_NOTES`, `MEASURE_NOTES` and `ARREST_NOTES`. The API has no dictionary, and what a clearance means (arrest *or exceptional means*), which rape definition applies, what `property-crime` excludes, why an arrest cannot be differenced against a clearance, are the caveats people miss |
+| **written twice** | `description` — **the same string as `definition`**, emitted under both names because the loader and the catalog table know only `description` while `db_import`'s description generator reads `definition` as context. An entry carrying one and not the other loses its text at whichever end reads the other name, which is exactly what happened before `f107804`. clio's exporter does the same |
 
-`series_id` is `fbi/{offense}/{scope}/{measure}` for crime and
-`fbi/employment/{ori}/{measure}` for staffing. The 21 description buckets are
+`series_id` is `fbi/{offense}/{scope}/{measure}` for crime,
+`fbi/employment/{ori}/{measure}` for staffing and `fbi/arrests/{code}/{scope}`
+for arrests — note the arrest form puts the scope **last** and carries no
+measure, since the route serves one. **23 description buckets**, by
 `(group, concept, facet-shape, unit)`: two per offence, because agency entries
-carry three facets the national and state ones do not, plus one for employment.
-`utils/catalog.py`'s own docstring still says twenty; the files say 21.
+carry three facets the national and state ones do not, plus one for employment,
+plus **two for the whole arrest route** — all 48 codes share a facet shape, so
+adding 2,736 entries added two buckets. That is the ratio worth noticing: 3,886
+entries over 23 shapes, and 327 distinct description strings. The catalogue is a
+grid, not a corpus. `utils/catalog.py`'s own docstring still says twenty.
 
 ### The cost of a rebuild
 
@@ -957,6 +983,25 @@ Enumerating all 19,636 agencies is cheap — 51 calls — but **pulling them is
 not**: 19,636 employment calls alone is about twenty hours at the allowance,
 before a single offence. Choose the cities you intend to model.
 
+**The arrest harvest is five times the offence one** and got its own runner,
+`utils/arrest_harvest.py`, rather than another `harvest()` call: 48 × 57 =
+**2,736 calls** at `PAUSE` **4.0** — **3.0 hours**, longer than a notebook
+session or a terminal's patience. Its default is the **curated 28 codes** at
+national and state scope, 1,596 calls and 1.8 hours, which is the run to make if
+you are not committing to the whole table; `plan()` and `--dry-run` price either
+one without spending a request.
+
+So it is a resumable CLI that checkpoints to `data/arrest_harvest.jsonl` — one
+line per completed `(code, scope)`, carrying that pair's entries, so
+`--export-only` rebuilds all 48 YAML files from the checkpoint without touching
+the network. That design paid for itself on the first run, which finished 2,733
+of 2,736 and left three pairs pending: the re-run took **nine seconds** instead
+of three hours.
+
+Re-harvesting arrests does **not** touch the offence files. One file per group
+is what makes that true, and it is why the two routes can be re-pulled on
+different schedules.
+
 ## The notebooks
 
 Seven, under `notebooks/fbi/`. The first four are the plumbing; the last three
@@ -967,7 +1012,7 @@ ask questions of the data. Call counts are each notebook's own.
 | `api.ipynb` | what one call returns, the coverage series by year, the traps demonstrated live, the agency registry | a handful |
 | `catalog.ipynb` | the request vocabulary, the five cities, the harvest, the export, coverage as a catalog field | the harvest |
 | `client.ipynb` | `FbiClient` on one department: ORI discovery, one request's four series, the clearance rate, officers, crime against capacity — and the filing schedule under Washington's 1993-1997 clearances, which is where the rule started | 3 |
-| `mcp.ipynb` | **two** of the three tools as a model sees them, over `{period: value}` dicts, with `utils/mcp.py`'s first-version rule. Not brought level with the arrest route | a handful |
+| `mcp.ipynb` | **all three** tools as a model sees them, over `{period: value}` dicts, with `utils/mcp.py`'s first-version rule | a handful |
 | `walkthrough.ipynb` | **eight scopes**: homicide per 100,000, clearance rates, arrests, officers per 100,000, and §5's test of whether each city breaks at its own conversion date | 39 |
 | `enforcement.ipynb` | six arrest codes at six scopes, clearance reasons from the NIBRS files, and §3 on the filing schedule underneath the arrest series | 49 |
 | `withdrawal.ipynb` | recorded crime as a report count: four instruments, the statutory trap, and the external check against death certificates | 96 |
@@ -993,13 +1038,14 @@ it, so a threshold moved there moves in all three.
 
 ## Tests
 
-**264 FBI tests, all passing, none touching the network** — run 2026-09-26,
-inside a suite of 866 that also passes whole.
+**313 FBI tests, all passing, none touching the network** — run 2026-10-11,
+inside a suite of 915 that also passes whole.
 
 | File | Tests | What it covers |
 | --- | --- | --- |
 | `tests/test_fbi_arrests.py` | 132 | the arrest route and its mapper: code normalisation and refusal, the partition, the single-offence null reading, the trailing-run split by scope, judged-on-counts, the negative-rate notice |
 | `tests/test_fbi_nibrs.py` | 53 | `utils/nibrs.py`: the clearance-reason rules, the incident unit, the zip layouts, the checked A–E mapping, `UnknownAgency`/`NoIncidents` |
+| `tests/test_fbi_arrest_catalogue.py` | 49 | the arrest catalogue, and mostly **the checkpoint**: that a second run over a full one makes no requests, that a partial one fetches only what is missing, that pairs are taken code-major so a kill leaves whole codes, and that a truncated last line costs one pair rather than the file. Then the entry (the offence named where the payload does not name it, the text under both names, `retrieval` minus `tool`, the span from the filings and not the window, the registry record at agency scope), the empty codes that are catalogued rather than dropped, all 48 notes reaching the entries they describe, and the export's file-per-code sorting and padding |
 | `tests/test_fbi_notebook_filing.py` | 27 | `utils/filing.py`: the three tests and their floors, `arrest_unreadable`'s three changes, `trailing_sum` |
 | `tests/test_fbi_client.py` | 25 | `FbiClient` over `httpx.MockTransport` with hand-built payloads |
 | `tests/test_fbi_filings.py` | 14 | the blank-month rule itself: mass, periodic returns, lumps, the kept tail |
@@ -1020,8 +1066,8 @@ key or reach the network.
 
 Under `notebooks/fbi/` unless stated. **Everything under `data/` is gitignored
 and regenerable** — but not equally cheap: `data/raw/agencies.json` is 51 calls
-(5.5 MB), the eleven catalog files 575 calls, and `data/nibrs/` six downloads and
-~307 MB.
+(5.5 MB), the eleven offence catalog files 575 calls, the 48 arrest files
+**2,736**, and `data/nibrs/` six downloads and ~307 MB.
 
 | Path | What |
 | --- | --- |
@@ -1030,31 +1076,33 @@ and regenerable** — but not equally cheap: `data/raw/agencies.json` is 51 call
 | `mcp_server/responses/fbi.py` | the three response models and the three mappers, and the blank-month rule: `_levels`, `_runs`, `_periodic`, `_lumps`, `_unfiled`, `_read_filings`, `_one_offence`, `_defined`, `_qualify`, and the notice builders. 2,049 lines, and the largest single piece of the integration |
 | `mcp_server/server.py` | `fbi_offenses`, `fbi_arrests`, `fbi_employment` and `_call_fbi` (a fresh client per call, no cache) |
 | `environment.py` | `get_data_gov_key()` (`DATA_GOV_KEY`) and `get_fbi_base_url()` |
-| `utils/catalog.py` | `scopes()`, `harvest()`, `harvest_employment()`, `entries_from()`, `employment_entries()`, `repair()`, `export()`; `OFFENSE_NOTES`, `MEASURE_NOTES`, `PAUSE`, the `STATES` fallback |
+| `utils/catalog.py` | `scopes()`, `harvest()`, `harvest_employment()`, `entries_from()`, `employment_entries()`, `arrest_entries()`, `harvest_arrests()`, `arrest_group()`, `group_of()`, `repair()`, `export()`; `OFFENSE_NOTES`, `MEASURE_NOTES`, `ARREST_NOTES` (48), `PAUSE`, the `STATES` fallback |
+| `utils/arrest_harvest.py` | the resumable arrest-harvest CLI: `PAUSE` 4.0, `plan()`, the `data/arrest_harvest.jsonl` checkpoint. `--codes` takes `all` (48), `curated` (28), `all-only`, or a list, and **defaults to `curated`**; `--scopes` takes `national`, `states` (51), `cities` (the catalog's five ORIs) or explicit scopes, and **defaults to `national,states`** — so the full 2,736 needs `--codes all --scopes national,states,cities`. Also `--dry-run`, `--limit`, `--export-only`, `--no-export`, `--start`/`--end`, `--pause`/`--retries`/`--retry-wait` |
 | `utils/filing.py` | the filing rule all three analysis notebooks share: `monthly`, `context`, `local_median`, `surrounding`, `unreadable`, `arrest_unreadable`, `trailing_sum`, `stamp_source` |
 | `utils/nibrs.py` | the NIBRS incident files: `fetch`, `agency`, `clearance_by_reason`, `pooled`; `OFFENSES`, `REASONS`, `EXCEPTIONAL`; the eight traps in the docstring |
 | `utils/mcp.py` | the tools over MCP: `call_tool` (which refuses an argument the server does not advertise), `StaleServerError`, `list_tools`, and the superseded `unfiled` / `rolling_12` / `clearance_rate` that only `mcp.ipynb` uses |
 | `utils/fetch.py` | the earlier stdlib-urllib probe module: `summarized`, `agencies`, `police_employment`, `officers`, `probe`. Superseded by the client; see trap 1 |
-| `data/fbi_series_<group>.yaml` | 11 files, 1,150 entries — ten offences plus employment |
+| `data/fbi_series_<group>.yaml` | 59 files, 3,886 entries — ten offences, employment, and 48 arrest codes |
+| `data/arrest_harvest.jsonl` | the arrest harvest's checkpoint, one line per completed `(code, scope)` |
 | `data/raw/agencies.json` | the registry, 19,636 agencies with ORI, type, county and `nibrs_start_date` |
 | `data/raw/probe.json` | which offence slugs and scopes the API actually serves |
 | `data/harvest_failures.json` | what the last harvest lost, for `repair()` |
 | `data/nibrs/{ST}-{year}.zip` | the cached incident files — NY and TN, 2023-2025 |
-| `tests/test_fbi_*.py` | 264 tests across six files, no network |
+| `tests/test_fbi_*.py` | 313 tests across seven files, no network |
 
 ## Known gaps
 
-- **The catalog holds no arrest series.** Its 1,150 entries are state-grain
-  offences and employment, written before the arrest route existed, so
-  `fbi_arrests` is served but not discoverable. 47 codes × 57 scopes is 2,679
-  entries at one request each — about two and three-quarter hours at `PAUSE`, and
-  five times the existing catalogue in files. The honest first step is a code
-  subset, since an entry has no way today to say that a code is empty at a scope,
-  and at agency scope most of them are.
 - **Not loaded.** `db_import.load_catalog.load(DATA_DIR, "fbi")` would work —
   the loader is source-generic and reads `fbi_series_*.yaml` — but
-  `series_catalog` has no `fbi` rows today.
-- **No descriptions.** The 21 buckets exist; `descriptions.yaml` does not.
+  `series_catalog` has no `fbi` rows today, and loading it now would **silently
+  discard** the five measured fields the arrest entries carry. That is what
+  [the quality-fields CR](../series-catalog-quality-fields.md) is for, and it is
+  what blocks the load rather than anything in the loader.
+- **`descriptions.yaml` does not exist**, and after `f107804` it is less needed
+  than it looks: the exporter writes `description` directly, so no entry is
+  textless. What is missing is the *generated* description — the one
+  `db_import.descriptions` would write from `definition` plus the facets. 23
+  buckets is a small enough job to be worth doing properly rather than skipping.
 - **The catalog's five cities and the notebooks' eight scopes do not
   intersect fully** — see [The catalog](#the-catalog).
 - **Three further CDE routes are named in the service's own documentation and

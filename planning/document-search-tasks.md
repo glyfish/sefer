@@ -495,6 +495,63 @@ confirmed in both `yada` and `yada_dev`, and `0001` is **head**, not lagging.
 
 ## 3. Deferred
 
+### 3.0 Rebuild the document stores — do the data fixes here
+
+**Planned 2026-10-18 at the user's request:** finish the code work, then rebuild. Several
+defects are fixed in code but survive in the data, and a rebuild is the only moment some
+of them can be addressed at all.
+
+**Carry these into the rebuild:**
+
+1. **Drop the `document_date` key.** 123 chunks carry it because
+   `load_research_document` wrote the form's field name straight into Chroma while
+   `_append_research_document_metadata` renamed it to `published_date` for the yaml — two
+   sinks, one dict, disagreeing. Renamed everywhere in code (form model, tool schema,
+   function parameter, `meta_data`, `html/js/forms.js`); the 123 existing chunks need the
+   rebuild. Exactly two documents are affected: "What is Fragility?" and "Probability as
+   Logic".
+2. **Normalise `published_date` to ISO** (§2.3a) — 52 distinct values across five formats,
+   one of them (`11/12/2018`) ambiguous and needing a human decision.
+3. **Normalise `authors`** (§2.3) — the comma-joined string that makes author filters
+   unsatisfiable. A rebuild is the chance to store a normalised multi-valued field.
+4. **Deduplicate `research_documents.yml` first.** `_append_research_document_metadata`
+   appends without checking for an existing record, so "Probability as Logic" has **six**
+   entries with conflicting `authors` ('E. T. Jaynes' / 'E.T. Jaynes'), `published_date`
+   ('Jan 01, 2003' / '2003-01-01' / '1990-01-01'), `shelf` ('jaynes' / 'publications') and
+   four different `topic` texts. This yaml is the input to the rebuild, so it must be
+   cleaned before, not after.
+5. **Drop the redundant github metadata keys.** Verified identical across all 415,006
+   chunks: `file_name` == `filename`, `file_path` == `path` == `source`,
+   `commit_ts` == `ts_iso`, `commit_ts_unix` == `ts_unix`. Sixteen keys carrying about
+   eleven facts, roughly 63 MB of stored metadata. Note `before:`/`after:` filter on
+   `ts_unix`, so pick which name survives before deleting either.
+6. **Apply a `file_filter`** (§2.5) — `GitLoader` is constructed without one. Prune by
+   displacement, not volume: LICENSE/boilerplate (25x over-represented), `_site/` and
+   `_production/` duplicate renders, `.ipynb_checkpoints/`.
+7. **Deterministic chunk ids** (§2.6) — makes the rebuild idempotent and is the
+   precondition for incremental re-index afterwards.
+8. **Include `glyfish/yada`** (§3.1) — 167 files, currently 0 chunks.
+
+**Switch the embedding model while you are here.** The stores are on
+**`text-embedding-ada-002`**, which nobody chose — `OpenAIEmbeddings()` is constructed in
+`chroma_document_loader.py:33` with no `model=` argument, so it takes langchain's legacy
+default. `text-embedding-3-small` is the same 1536 dimensions, scores better on MTEB, and
+costs a fifth as much. Query and index embeddings must match, so **a rebuild is the only
+time this can change.**
+
+| model | $/1M tokens | rebuild cost |
+| --- | --- | --- |
+| `text-embedding-ada-002` (current) | 0.10 | **$8.30** |
+| `text-embedding-3-small` | 0.02 | **$1.66** |
+
+Measured 2026-10-18 from live chunk sizes: github 415,006 chunks at ~786 chars average
+(326 M chars) plus research_library 4,875 at ~1,120 (5.5 M chars) — about **83 M tokens**.
+`fred` (145,679 chunks) and `etf` (36,475) are excluded; those move to Postgres.
+
+**Sequence:** clean the yaml → fix remaining loader-side normalisation → rebuild → re-run
+`notebooks/documents/document_store_queries.ipynb` and confirm the §"metadata keys" cell
+shows no partial-coverage surprises.
+
 ### 3.1 Reload `glyfish/yada` into the github store
 
 **Deferred 2026-10-18 at the user's request.** The code is fixed; only the data is stale.

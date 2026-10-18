@@ -342,7 +342,40 @@ Residual risks inside this flow — none of them fabrication:
    reporting failure. Tools should fail loudly rather than return an empty success.
 3. **Prose around the artifact** is still unconstrained — but the report and plot are not.
 
-### 5.4 MCP Apps are for UI only
+### 5.4 Display path — MCP Apps, including for plots
+
+**Revised 2026-10-11, after testing.** The original decision below — Apps for interactive UI,
+tool results for static output — rested on a premise that turned out false: that a tool-result
+image displays acceptably. It does not. Goose renders `ImageContent` correctly but **collapses
+it behind an "Output" expander**, so every chart costs a click, and no setting we could confirm
+changes that.
+
+The deeper point is about control. A tool result means **the client decides** how your output
+appears; an App means **you** decide. Three consequences:
+
+1. **Presentation.** Expanded by default, sized and laid out as yada chooses.
+2. **Controls.** Date range, series toggle, export, zoom — a chart eventually wants these, and
+   `ImageContent` offers nowhere to put them. Building the static path first means writing it
+   twice.
+3. **Token cost — the material one.** An `ImageContent` block goes to the **model** as well as
+   the human: vision tokens on every turn it survives, and meida-backed bar charts run ~88 KB.
+   With an App, the tool returns a one-line summary to the model and the **app** fetches the
+   chart over the app-initiated `tools/call` zero-token path. The pixels never enter the
+   model's context. That fits §5.3's id-passing principle better than the current design does.
+
+**The cost, decided knowingly:** Apps are an extension, and Claude Desktop does not render them
+today (filed as anthropics/claude-ai-mcp#1107). An App-based plot is Goose-only until that is
+fixed. Accepted — Goose is the target client, and Claude Desktop renders nothing useful from a
+third-party server anyway.
+
+**Why this is not a proprietary bet.** `io.modelcontextprotocol/ui` is a spec extension, stable
+2026-01-26, under Linux Foundation governance. Any client adding Apps support implements the
+same `ui://` resource plus `_meta.ui.resourceUri` contract this server will emit. The dependency
+is on the spec, not on Goose.
+
+*Original reasoning, kept because the tool-result mechanics remain accurate:*
+
+### 5.4a MCP Apps are for UI only (superseded)
 
 **Decided 2026-10-04.** Two return paths, used for different jobs:
 
@@ -366,7 +399,19 @@ Caveats for the tool-result path: the image sits in a collapsible "Output" secti
 image is sent to the **model** as well as the human, so it costs vision tokens for as long as it
 stays in context.
 
-### 5.5 Build order
+### 5.5 Build order — revised
+
+1. **DONE** — `plot` and `plot_report` as MCP tools returning `[text, ImageContent]`, on
+   `mcp>=2`. Verified end to end: 32 tools discovered from meida, charts render in Goose
+   (behind the expander), notebook executes clean.
+2. **Next — the plot App.** Wrap the chart in a `ui://` resource so yada controls the display
+   and the image can bypass the model's context. Starting point: `~/Develop/scratch/mcp-appstest/`
+   already implements the handshake, `size-changed`, self-promotion and the zero-token
+   `tools/call`, all verified against Goose.
+3. **Then the report UI**, which is where the Apps contract earns its keep — picking series and
+   assembling a report. By then the plumbing is proven by step 2.
+
+*Superseded build order:*
 
 1. **`plot_report(report_id_or_title)`** — the first server, one tool, wrapping the existing
    `render_report_plot` (`agents/plots/time_series_report_plot_agent.py:141`, already

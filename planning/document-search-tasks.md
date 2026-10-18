@@ -383,6 +383,40 @@ chunks). Either `$in` over known values at `research_library_filters_to_where`
 (`apps/agentic/core/llm_filter_extractor.py:430-438`), or a normalized multi-valued field
 at load time.
 
+### 2.3a Normalise the research_library date metadata
+
+**Found 2026-10-18** by the user running §"metadata keys" of
+`notebooks/documents/document_store_queries.ipynb` — the coverage column made it visible.
+Same class as §2.3: the field cannot support the filter people expect of it.
+
+**Two mutually exclusive fields partition the corpus.**
+
+| field | chunks | distinct values | documents |
+| --- | --- | --- | --- |
+| `published_date` | 4,752 (97.5%) | 52 | all but two |
+| `document_date` | 123 (2.5%) | 2 | "What is Fragility?", "Probability as Logic" |
+
+`BOTH = 0`, `NEITHER = 0` — every chunk has exactly one. Two loader eras, never reconciled.
+
+**And `published_date` is not one format but five:**
+
+```
+ISO            2010-05-01, 2019-12-02        2 distinct
+long           Dec 19, 2020                 38 distinct
+abbreviated    Feb. 19, 2017                 \
+full month     July 18, 2021                 / 11 distinct, unrecognised by a strict parser
+slash          11/12/2018                    1 distinct -- AMBIGUOUS, Nov 12 or Dec 11 is unknowable
+```
+
+So a date filter is not merely unwired, it is **unwireable** until the values are
+normalised. Any range comparison over these strings is meaningless, and one value cannot
+be resolved at all without knowing the source convention.
+
+**Do:** normalise to ISO at load time in the research_library loader, collapse
+`document_date` into `published_date`, and resolve `11/12/2018` by hand against its source
+document. Only then wire a `before:`/`after:` qualifier for this store — note those
+currently work on github only, via `ts_unix`, which research_library lacks entirely.
+
 ### 2.4 Audit `fred` / `etf` for the same extract-then-equality pattern
 
 **[?]** They share `_in_filter` and the same extract-then-equality shape and **were not

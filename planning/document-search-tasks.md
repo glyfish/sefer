@@ -259,24 +259,35 @@ whose filters silently return nothing would make MCP testing uninterpretable.
 
 ### 1.0 The design is settled — see `yada-document-mcp-design.md`
 
-**Written 2026-10-18.** The tool surface, result contract, resolution rules, manifest and
-build order are specified there. In brief: **one** `query_documents` tool that both searches
-and describes over the same six filter parameters; the client proposes filter values and the
-server resolves them against a 20 KB manifest; a value that resolves to nothing is answered
-in 0.01 ms without searching. §§1.1-1.3 below are superseded by it; §1.2a (field titles name
-the metadata key) survives and is folded in.
+**Written 2026-10-18, revised the same day.** The tool surface, result contract, resolution
+rules, manifest and build order are specified there. In brief: **one tool per store** —
+`search_github` and `search_library` — each both searching and describing over that store's
+three filters; the client proposes filter values and the server resolves them against a
+20 KB manifest; a value that resolves to nothing is answered in 0.01 ms without searching.
+§§1.1-1.3 below are superseded by it; §1.2a (field titles name the metadata key) survives
+and is folded in.
 
-### 1.1 Decide the tool surface
+### 1.1 Decide the tool surface — SETTLED: one tool per store
 
 The info agents to expose: `CodeRepoAgent`, `ResearchLibraryAgent`, and — pending §2.4 —
 `FredDataInfoAgent` / `ETFDataInfoAgent`.
 
-Open question to settle first: **one `search_documents(source, query, filters)` tool, or
-one tool per store?** The orchestrator's inter-delegate routing is ~40% of its prompt and
-dies in the MCP model; the client does that routing instead. A single tool with a `source`
-enum keeps the schema tax down (the migration plan puts it at 15-17k tokens) and gives
-the client one obvious entry point. Per-store tools give better descriptions and let the
-client filter by capability.
+The question was: **one `search_documents(source, query, filters)` tool, or one tool per
+store?** The first draft of the design doc chose one. That was wrong, and the measurement
+that settles it is that the two stores share **no filter at all** — `CodeRepoFilters` is
+`{account, ext, repo}`, `ResearchLibraryFilters` is `{authors, shelf, title}`, and the only
+common field is the query text. `source` was therefore not a filter but a discriminator
+deciding which other parameters were legal, which a flat tool signature cannot express. The
+full argument and its four consequences are in `yada-document-mcp-design.md` §2.1.
+
+The schema-tax argument for one tool (the migration plan puts the surface at 15-17k tokens)
+survives but is weak: the two tools publish three filters each rather than six between them,
+so the filter half of the tax is unchanged and only the shared `query`/`field`/`limit` block
+is duplicated.
+
+The orchestrator point is unaffected either way — its inter-delegate routing is ~40% of its
+prompt and dies in the MCP model, and the client does that routing regardless of whether it
+picks a tool name or a `source` value. Picking a tool name is the easier of the two.
 
 ### 1.2 Return structured hits, not a prose blob
 

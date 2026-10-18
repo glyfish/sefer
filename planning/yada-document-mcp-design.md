@@ -15,11 +15,6 @@ Task queue and defect list live in `document-search-tasks.md`; this is the contr
 describing, because within a store the same filters mean the same thing either way and the
 client is a language model that can tell which it wants.
 
-*Revised 2026-10-18, after the first draft proposed a single `query_documents` over both
-stores. The stores share no filter — see §2.3. That draft's reasoning is kept there rather
-than deleted, because the thing it got right (one vocabulary, one result shape, one
-resolution path) is the whole of this document and only the entry point changed.*
-
 **The server adjudicates values; the client proposes them.** Filter extraction moves to the
 client — its model already has the user's words and its own cost counter. That is only safe
 because the server *resolves* every proposed value against the index and says what it did.
@@ -45,8 +40,8 @@ tells the model nothing.
 
 ```python
 async def search_code(
-    account: Annotated[str | None, Field(description=
-        "GitHub account. One of 'troystribling' or 'glyfish'. Omit to search both.")] = None,
+    account: Annotated[Literal["troystribling", "glyfish"] | None, Field(description=
+        "Whose repositories. Omit to search both.")] = None,
     repo: Annotated[str | None, Field(description=
         "Repository name, or a fragment of one. Need NOT be complete or exactly as stored "
         "-- it is resolved against the index. If it matches nothing the result says so and "
@@ -104,33 +99,26 @@ has a GitHub MCP server, a model must choose between yada's index of 101 cloned 
 the live API with nothing in the name to separate them. Routing from names alone is this
 design's premise, so a name that mis-signals is a correctness problem, not a style one.
 
-### 2.2 No `field` parameter
+### 2.2 What the filters deliberately omit
 
-An earlier draft had `field: Literal[...]` to pick which breakdown to return. It was
-carrying store-discrimination that the tool name now carries, and once split it bought only
-output narrowing — which is not worth a parameter, because the two facet paths have very
-different sizes:
+**`path`.** 9,529 distinct values in code, 64 in the library. Listing files is a bounded,
+paginated affordance of its own — what `filenames_for_repository` does today — not a filter
+and not a breakdown. Keeping it out is what lets a describe return the *complete* vocabulary
+in one call.
 
-| call | facet source | cost |
-| --- | --- | --- |
-| `query` set — search | the 8 retrieved candidates | `{'.rb': 6, '.rdoc': 2}`, trivial |
-| `query` omitted — describe | the manifest | 1,189 tokens (library) / 2,381 (code) |
-
-Narrowing never helps a search, because those facets are already tiny. It only trims a
-describe — and a describe is a deliberate *"what is in here"* where the whole vocabulary is
-more useful than a third of it. A model that narrows, then needs another field, has spent
-two calls where one would have done.
-
-`path` is the one field deliberately absent: 9,529 distinct values in code, and listing
-files is a bounded, paginated affordance of its own (what `filenames_for_repository` does
-today), not a value of a `field` enum. Keeping it out is why `field` is unnecessary rather
-than merely redundant.
+**Any way to ask for one breakdown rather than all of them.** A describe returns every
+field's values because they are small: 1,189 tokens for the library, 2,381 for code. A
+search's facets are smaller still — they come from the 8 retrieved candidates, e.g.
+`{'.rb': 6, '.rdoc': 2}`. Narrowing would save nothing on a search and would make a describe
+worse, since a model that asks for one field and then needs another has spent two calls
+where one would have done.
 
 ### 2.3 Why two tools and not one
 
-The first draft proposed a single `query_documents(source, repo, account, authors, title,
-shelf, ext, …)`. Measured against the live filter models, that was six filters only by
-appearance:
+The stores look mergeable — both are Chroma, both are searched the same way — and a single
+`query_documents(source, repo, account, authors, title, shelf, ext, …)` is the obvious
+simplification. It does not work. Measured against the live filter models, those are six
+filters only by appearance:
 
 | | fields |
 | --- | --- |
@@ -138,37 +126,36 @@ appearance:
 | `ResearchLibraryFilters` | `authors`, `shelf`, `title` |
 | **shared** | `cleaned_query` — and nothing else |
 
-The sets are disjoint. `source` was not a seventh filter but a **discriminator** deciding
-which other three were legal, and a flat tool signature cannot express that. Four
-consequences, each of which disappears on splitting:
+The sets are disjoint. `source` would not be a seventh filter but a **discriminator**
+deciding which other three were legal, and a flat tool signature cannot express that. Four
+consequences, all avoided by keeping the tools separate:
 
-- **The mutual exclusion would have been prose.** `query_documents(repo="zgomot",
+- **The mutual exclusion could only be prose.** `query_documents(repo="zgomot",
   shelf="jaynes")` is representable and meaningless. The only place to forbid it is the
   description — the mechanism §1 rules out, with a failure already on record here.
 - **§4's relaxation would mishandle it.** `repo`+`shelf` is not an empty conjunction to be
   relaxed but a category error: both values resolve, the pair matches zero, and progressive
   relaxation drops one and returns the *other store's* documents, reporting success in
-  `filters_relaxed`. The mechanism built to stop silent widening would have reintroduced it.
+  `filters_relaxed`. The mechanism built to stop silent widening would become a source of it.
 - **`metadata` could not be typed.** One tool forces `dict[str, str]` or a union the model
   must discriminate; two give each store a real model. Verified against the installed SDK:
   a nested `GithubMeta` reaches `output_schema` under `$defs` with its `account` enum intact.
-- **`field` could not even have been an enum — and splitting removed the need for it.**
-  `field="ext"` is meaningless against research_library, so one tool had to take a free
-  string. Splitting first made it a closed set of three, and then made it unnecessary
-  altogether: with one store per tool, "which field" stops being a question worth asking
-  (§2.2). A parameter that exists only to disambiguate a merge is the clearest evidence the
-  merge was wrong.
+- **It would need a `field` parameter, and that parameter would be meaningless.** To ask
+  for a breakdown you must say of what, and `field="ext"` means nothing against
+  research_library — so one tool must take a free string where two need nothing at all
+  (§2.2). A parameter that exists only to disambiguate a merge is evidence against the
+  merge.
 
 Splitting is the same argument §2.4 makes for enums — make a wrong value unrepresentable —
 applied one level up, to a wrong *combination*.
 
-**What splitting does not cost.** The draft's objection was never really about tool count: it
-was that seven ad-hoc info tools have no common shape and a vocabulary disagreeing with
-itself (`repository` vs `repo`, `author` vs `authors`). Consistent naming across two tools
-fixes that as completely as one tool would. Its worked example survives verbatim — *"what
-file types are in zgomot?"* is `search_code(repo="zgomot")` with no `query`, still a question
-no current tool can answer. Everything in §3–§6 is shared implementation behind both tools,
-not duplicated.
+**What two tools do not cost.** The case for merging is really a case against the status quo
+— seven ad-hoc info tools with no common shape and a vocabulary disagreeing with itself
+(`repository` vs `repo`, `author` vs `authors`). Consistent naming across two tools fixes
+that as completely as one tool would, and composing filters with description still works:
+*"what file types are in zgomot?"* is `search_code(repo="zgomot")` with no `query`, a
+question no current tool can answer. Everything in §3–§6 is shared implementation behind
+both tools, not duplicated.
 
 The one genuine loss is a single call spanning both stores. Nothing in the codebase asks for
 it — the orchestrator's "both stores are considered" at `orchestrator.py:520` is about the
@@ -177,10 +164,8 @@ take, in §10.
 
 ### 2.4 Enums only where the set is tiny, closed and stable
 
-`source` (2), `account` (2) and `shelf` (5) cost 38 tokens between them — measured on the
-single-tool draft — and make a wrong value unrepresentable. Splitting retires `source` into
-the tool name and adds `field` as a closed set of three per tool, so the total barely moves
-and is not worth re-measuring. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
+`account` (2) and `shelf` (5) cost 34 tokens between them and make a wrong value
+unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
 `ext` (189) stay free strings **deliberately** —
 an enum would force the model to reproduce `'Troy Stribling, William H. Matthaeus'` verbatim,
 when `Matthaeus` is the reasonable thing to say and resolution handles it.
@@ -353,7 +338,7 @@ relaxation that drops the least-specific term and names it in `filters_relaxed`.
 
 **Splitting the tools makes relaxation safe.** Every conjunction a tool can now express is
 within one store, so the worst a dropped term costs is a broader answer from the right
-corpus. The single-tool draft admitted `repo=zgomot AND shelf=jaynes` — two resolvable
+corpus. A merged tool would admit `repo=zgomot AND shelf=jaynes` — two resolvable
 values whose pair is empty *by category, not by coverage* — where relaxation would have
 dropped one and returned the other store's documents under `status="filters_relaxed"`,
 reading as a successful widening. That failure is unrepresentable here, which is why §2.3
@@ -404,8 +389,7 @@ pydantic model with field descriptions — *"Must be exactly one of: 'jaynes' (p
 E. T. Jaynes)… Map user language: 'blog'/'posts' → 'posts'"* — which is precisely what an MCP
 `input_schema` is, so the *shape* ports directly.
 
-**The descriptions do not port unchanged**, and an earlier draft of this section wrongly said
-they did. They were written for a world with no resolver and demand exactness that resolution
+**The descriptions do not port unchanged.** They were written for a world with no resolver and demand exactness that resolution
 makes unnecessary — `repo` carries a 101-value enumeration, `account` says "must be exactly
 one of". Ported verbatim they would contradict §4. Rewrite each per §2.5.
 

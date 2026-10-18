@@ -11,9 +11,10 @@ Task queue and defect list live in `document-search-tasks.md`; this is the contr
 
 ## 1. The decision, in short
 
-**One tool per store.** `search_code` and `search_research_library`, each both searching and
-describing, because within a store the same filters mean the same thing either way and the
-client is a language model that can tell which it wants.
+**Two verbs, two stores, four tools.** `search_*` retrieves documents, `describe_*`
+retrieves metadata, one pair per store. The stores cannot share a tool because their filters
+are disjoint (§2.3); the verbs cannot share one because a merged tool carries parameters and
+result fields that are meaningless in one of its modes (§2.2).
 
 **The server adjudicates values; the client proposes them.** Filter extraction moves to the
 client — its model already has the user's words and its own cost counter. That is only safe
@@ -32,14 +33,16 @@ exact mechanism this line rules out.
 
 ---
 
-## 2. The two tools
+## 2. The four tools
 
-Descriptions are written out in full because **they are the interface** — see §2.5. A bare
+Descriptions are written out in full because **they are the interface** — see §2.6. A bare
 `authors: str | None` publishes `{"anyOf":[...], "default":null, "title":"Authors"}` and
 tells the model nothing.
 
 ```python
 async def search_code(
+    query: Annotated[str, Field(description=
+        "What to look for, in plain language.")],
     account: Annotated[Literal["troystribling", "glyfish"] | None, Field(description=
         "Whose repositories. Omit to search both.")] = None,
     repo: Annotated[str | None, Field(description=
@@ -49,14 +52,20 @@ async def search_code(
     ext: Annotated[str | None, Field(description=
         "File extension such as '.rb' or '.py', with or without the dot. Resolved as "
         "`repo` is. Note this store is 46% .ipynb notebooks.")] = None,
-    query: Annotated[str | None, Field(description=
-        "What to search for, in plain language. OMIT IT to describe the store instead: "
-        "the result then carries the values available for every filter above.")] = None,
     limit: int = 10,
-) -> CodeResult:
+) -> CodeHits:
+
+
+async def describe_code(
+    account: ... = None, repo: ... = None, ext: ... = None,   # same three, same descriptions
+) -> CodeVocabulary:
+    """What is in the code store: the values available for every filter, under any
+    filters given. `describe_code(repo="zgomot")` answers "what file types are in zgomot"."""
 
 
 async def search_research_library(
+    query: Annotated[str, Field(description=
+        "What to look for, in plain language.")],
     authors: Annotated[str | None, Field(description=
         "Author name or fragment. Need NOT be complete or exactly as stored -- "
         "'Matthaeus' matches the five documents whose author list contains it. "
@@ -70,18 +79,33 @@ async def search_research_library(
         "Which collection: 'notes' research notes, 'posts' blog posts, 'publications' "
         "published papers, 'jaynes' papers by E. T. Jaynes, 'reading_list' external "
         "papers.")] = None,
-    query: Annotated[str | None, Field(description=
-        "What to search for, in plain language. OMIT IT to describe the store instead.")] = None,
     limit: int = 10,
-) -> LibraryResult:
+) -> LibraryHits:
+
+
+async def describe_research_library(
+    authors: ... = None, title: ... = None, shelf: ... = None,
+) -> LibraryVocabulary:
 ```
 
-`query` set → search, with facets computed free from the retrieved candidates.
-`query` omitted → describe: the full vocabulary, served from the manifest.
+**`search_*` retrieves documents. `describe_*` retrieves metadata.** Both are searching;
+they differ in what they search over and what comes back, so they are separate tools.
+
+`query` is **required** on `search_*`. An optional `query` whose absence switched the tool
+into describing put behaviour in an omission, where a schema cannot express it and a reader
+cannot see it.
+
+`describe_*` takes no `query` and no `limit` — neither means anything when the answer is a
+vocabulary. That is the point of the split: a merged tool carried `limit` that was
+meaningless half the time and a `hits` list that was structurally always empty.
 
 `source` is gone: the tool name carries it.
 
+Cost of four tools over two: **+596 tokens** of schema across both stores, about 4% of the
+15-17k tax. Measured 2026-10-18.
+
 ### 2.1 Naming
+
 
 `search_code`, not `search_github`. The positive examples in `document_agent.py` show how
 these are actually asked for — *"Where is MIDI output handled **in my code**?"*, *"What
@@ -90,7 +114,7 @@ definition of a Carnot Cycle."* The word "GitHub" never appears. It is the *sour
 content, not the content, which is why the agent class is `CodeRepoAgent` and only the store
 is called github.
 
-The *types* stay `GithubMeta` / `GithubResult`, after the store (`GITHUB_DB_NAME = "github"`).
+The metadata *type* stays `GithubMeta`, after the store (`GITHUB_DB_NAME = "github"`).
 That split is deliberate: the tool name is what a model routes on and must say what the
 content is; the type name is internal and should say which store it came from.
 
@@ -99,21 +123,31 @@ has a GitHub MCP server, a model must choose between yada's index of 101 cloned 
 the live API with nothing in the name to separate them. Routing from names alone is this
 design's premise, so a name that mis-signals is a correctness problem, not a style one.
 
-### 2.2 What the filters deliberately omit
+### 2.2 Why `search` and `describe` are separate tools
 
-**`path`.** 9,529 distinct values in code, 64 in the library. Listing files is a bounded,
-paginated affordance of its own — what `filenames_for_repository` does today — not a filter
-and not a breakdown. Keeping it out is what lets a describe return the *complete* vocabulary
-in one call.
+A merged `search_or_describe(query=None, …)` is representable, and it fails the same test
+§2.3 applies to merging the stores: it carries fields that are meaningless in one of its
+modes.
 
-**Any way to ask for one breakdown rather than all of them.** A describe returns every
-field's values because they are small: 1,189 tokens for the library, 2,381 for code. A
-search's facets are smaller still — they come from the 8 retrieved candidates, e.g.
-`{'.rb': 6, '.rdoc': 2}`. Narrowing would save nothing on a search and would make a describe
-worse, since a model that asks for one field and then needs another has spent two calls
-where one would have done.
+- `limit` means nothing when the answer is a vocabulary.
+- `hits` is structurally always empty without a `query`.
+- `facets` means two different things depending on whether `query` was given — the
+  retrieved candidates, or the whole filtered subset.
+- Behaviour lives in an **omission**. "Leave `query` out to get something else" is a mode
+  switch a schema cannot express and a reader cannot see.
 
-### 2.3 Why two tools and not one
+Splitting makes `query` **required** on `search_*`, which is the schema finally saying the
+obvious thing: you must state what you are looking for.
+
+The cost is +596 tokens of schema across both stores, about 4% of the 15-17k tax. Measured
+2026-10-18.
+
+There is also a plain naming argument, which is how this surfaced: with one merged tool
+there is no name for the document-search half. A capability you cannot name separately is
+one the interface is not expressing separately.
+
+### 2.3 Why the two stores are separate tools
+
 
 The stores look mergeable — both are Chroma, both are searched the same way — and a single
 `query_documents(source, repo, account, authors, title, shelf, ext, …)` is the obvious
@@ -142,11 +176,11 @@ consequences, all avoided by keeping the tools separate:
   a nested `GithubMeta` reaches `output_schema` under `$defs` with its `account` enum intact.
 - **It would need a `field` parameter, and that parameter would be meaningless.** To ask
   for a breakdown you must say of what, and `field="ext"` means nothing against
-  research_library — so one tool must take a free string where two need nothing at all
-  (§2.2). A parameter that exists only to disambiguate a merge is evidence against the
+  research_library — so one merged tool must take a free string where these need nothing at
+  all (§2.4). A parameter that exists only to disambiguate a merge is evidence against the
   merge.
 
-Splitting is the same argument §2.4 makes for enums — make a wrong value unrepresentable —
+Splitting is the same argument §2.5 makes for enums — make a wrong value unrepresentable —
 applied one level up, to a wrong *combination*.
 
 **What two tools do not cost.** The case for merging is really a case against the status quo
@@ -162,7 +196,23 @@ it — the orchestrator's "both stores are considered" at `orchestrator.py:520` 
 fred and etf *time-series* stores, which move to Postgres. Deferred, with the shape it would
 take, in §10.
 
-### 2.4 Enums only where the set is tiny, closed and stable
+### 2.4 What the filters deliberately omit
+
+
+**`path`.** 9,529 distinct values in code, 64 in the library. Listing files is a bounded,
+paginated affordance of its own — what `filenames_for_repository` does today — not a filter
+and not a breakdown. Keeping it out is what lets a describe return the *complete* vocabulary
+in one call.
+
+**Any way to ask for one breakdown rather than all of them.** A describe returns every
+field's values because they are small: 1,189 tokens for the library, 2,381 for code. A
+search's facets are smaller still — they come from the 8 retrieved candidates, e.g.
+`{'.rb': 6, '.rdoc': 2}`. Narrowing would save nothing on a search and would make a describe
+worse, since a model that asks for one field and then needs another has spent two calls
+where one would have done.
+
+### 2.5 Enums only where the set is tiny, closed and stable
+
 
 `account` (2) and `shelf` (5) cost 34 tokens between them and make a wrong value
 unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
@@ -170,7 +220,8 @@ unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
 an enum would force the model to reproduce `'Troy Stribling, William H. Matthaeus'` verbatim,
 when `Matthaeus` is the reasonable thing to say and resolution handles it.
 
-### 2.5 Field descriptions describe the SERVER, not the caller
+### 2.6 Field descriptions describe the SERVER, not the caller
+
 
 Every description above states what yada will do with the value. None imposes a requirement
 on the caller. That distinction is §1's rejection of orchestration prose, applied one level
@@ -199,7 +250,8 @@ Two consequences:
   the list the plan review found is bypassed anyway, since the regex path returns before the
   LLM ever sees it. The description gets shorter *and* truer.
 
-### 2.6 What both tools replace
+### 2.7 What these tools replace
+
 
 Seven ad-hoc info tools exist today with no common shape — `repository_names()`,
 `filenames_for_repository(account, repository, …)`, `research_library_titles_by_metadata(author, topic, shelf)`,
@@ -221,11 +273,17 @@ The SDK derives `output_schema` from the return annotation and populates
 Schema including `minimum: 0.0, maximum: 1.0` on a scored field, published in `tools/list`.
 Do not hand-build `CallToolResult`.
 
-One shared generic base, parameterised by the store's metadata model, with a concrete
-subclass per tool. The split is what makes `metadata` a real schema rather than an open
-dict.
+`Outcome` carries what both verbs owe the caller — what was asked, what actually ran, how
+values resolved. `Hits` adds the documents; `Vocabulary` adds the counts. Parameterising
+`Hit` by the store's metadata model is what makes `metadata` a real schema rather than an
+open dict.
 
-Verified against the installed SDK on 2026-10-18, not assumed: `DocumentsResult[GithubMeta]`
+The two verbs share `facets`, and the field means something different in each: in `Hits` it
+describes **the retrieved candidates** and is free; in `Vocabulary` it describes **the whole
+filtered subset** and comes from the manifest. Same name because it answers the same
+question — *what is in what I just got* — at two scopes.
+
+Verified against the installed SDK on 2026-10-18, not assumed: a generic parameterised by
 publishes `$defs: ['GithubMeta', 'Hit_GithubMeta_']` with `hits.items` a `$ref` to the
 latter and `account`'s enum intact. Pydantic mangles the generic's name into
 `Hit_GithubMeta_`, which is ugly in the published schema and harmless — it is a `$defs` key,
@@ -254,24 +312,31 @@ class Hit[M](BaseModel):
     metadata: M
     document: ResourceLink       # yada://{source}/{path} — fetch the full file on demand
 
-class DocumentsResult[M](BaseModel):
+class Outcome(BaseModel):        # shared by both verbs: what was asked, what actually ran
     status: Literal["ok", "no_match", "unresolvable_filter",
                     "filters_relaxed", "store_empty", "retrieval_error"]
     request: str                 # the argument AS RECEIVED; may already be a client rewrite
-    query: str | None            # the text actually embedded, after any stripping
-    hits: list[Hit[M]]
-    facets: dict[str, dict[str, int]]     # field -> value -> count
-    total: int | None
     filters_requested: dict[str, str]     # what the client proposed
     filters_applied:   dict[str, Any]     # what actually ran, incl. {"$in": [...]}
     filters_resolved:  dict[str, str]     # how: "exact" | "substring, 5 of 19" | "none"
     filters_relaxed:   dict[str, str]     # dropped to avoid an empty conjunction
-    best_score: float | None
     available: dict[str, list[str]]       # on unresolvable_filter: what DOES exist
 
+class Hits[M](Outcome):
+    query: str                   # the text actually embedded, after any stripping
+    hits: list[Hit[M]]
+    facets: dict[str, dict[str, int]]     # of the retrieved candidates only — free
+    best_score: float | None
 
-class GithubResult(DocumentsResult[GithubMeta]):   pass
-class LibraryResult(DocumentsResult[LibraryMeta]): pass
+class Vocabulary(Outcome):
+    facets: dict[str, dict[str, int]]     # every filter's values, from the manifest
+    documents: int                        # how many documents the filters match
+    chunks: int
+
+class CodeHits(Hits[GithubMeta]):      pass
+class LibraryHits(Hits[LibraryMeta]):  pass
+class CodeVocabulary(Vocabulary):     pass     # same shape; the facet KEYS differ
+class LibraryVocabulary(Vocabulary):  pass
 ```
 
 Four fields are load-bearing and were added for specific observed failures:
@@ -391,7 +456,7 @@ E. T. Jaynes)… Map user language: 'blog'/'posts' → 'posts'"* — which is pr
 
 **The descriptions do not port unchanged.** They were written for a world with no resolver and demand exactness that resolution
 makes unnecessary — `repo` carries a 101-value enumeration, `account` says "must be exactly
-one of". Ported verbatim they would contradict §4. Rewrite each per §2.5.
+one of". Ported verbatim they would contradict §4. Rewrite each per §2.6.
 
 ```
 today :  extract 1.0s (haiku) + retrieve 1.0s + rank 2.0s + generate 7.1s (opus)  ~11s, 3 LLM calls
@@ -454,7 +519,7 @@ reports identically), and a restart — the process Goose currently talks to sta
 2  extractor consumes it  deterministic resolution, $in on widening, short-circuit answer
                           on no match, model escalation only when ambiguous or over-broad.
 3  widen WorkerState      hits survive to the boundary.
-4  the two tools          search_code and search_research_library, the contract, over MCP.
+4  the four tools         search_* and describe_* per store, the contract, over MCP.
                           One shared implementation; the tools differ only in which three
                           filters they publish and which metadata model they return.
 ```
@@ -466,14 +531,14 @@ Steps 1–3 are not MCP work and can be built and measured before any protocol c
 ## 10. Open
 
 - **`search_all(query, limit)`** — one call spanning both stores. Deferred, not rejected.
-  Nothing in the codebase asks for it today and a model can call both tools, which also tells
+  Nothing in the codebase asks for it today and a model can call both `search_*` tools, which also tells
   it which store answered. If it is ever wanted the shape is already determined: **no
   store-specific filters**, because the cross-store case is exactly the case where none
   apply. That is what keeps it from reintroducing §2.3's problem, and it is why adding it
   later costs nothing — it is a third tool, not a change to these two.
 - **`ask_documents`** — a tool that runs `generate` server-side. Probably unnecessary,
   since the client is a model and hits now carry the metadata needed to cite. Decide once
-  the two search tools are real.
+  `search_code` and `search_research_library` are real.
 - **`grade_relative_floor = 0.5` is untuned** and was chosen for a generation cutoff. A hit
   list should cut looser — §2.1 of `document-search-tasks.md`, not this document.
 - **Deduplication.** Three of eight github chunks for one query were the same file. Invisible

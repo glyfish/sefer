@@ -257,6 +257,15 @@ Point `set_*_env` at `.env` and delete `.keys/`, or document loudly which is can
 Gate: Phase 0 complete, because exposing a search whose grader is nondeterministic and
 whose filters silently return nothing would make MCP testing uninterpretable.
 
+### 1.0 The design is settled — see `yada-document-mcp-design.md`
+
+**Written 2026-10-18.** The tool surface, result contract, resolution rules, manifest and
+build order are specified there. In brief: **one** `query_documents` tool that both searches
+and describes over the same six filter parameters; the client proposes filter values and the
+server resolves them against a 20 KB manifest; a value that resolves to nothing is answered
+in 0.01 ms without searching. §§1.1-1.3 below are superseded by it; §1.2a (field titles name
+the metadata key) survives and is folded in.
+
 ### 1.1 Decide the tool surface
 
 The info agents to expose: `CodeRepoAgent`, `ResearchLibraryAgent`, and — pending §2.4 —

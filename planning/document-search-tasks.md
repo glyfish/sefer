@@ -279,6 +279,29 @@ record per hit with `path`/`title`, score, the metadata header from §0.6, and t
 This is also the natural place to satisfy the user's "return top n hits rather than just
 the best" (§2.1): over MCP, top-n *is* the result shape.
 
+### 1.2a Form field labels must name the metadata key
+
+**User's call, 2026-10-18.** When the research-document load form is rebuilt as an MCP
+elicitation form, the date field's display name is **`published_date`**, not "Date".
+
+The reason generalises past this one field. Every failure in Phase 0 that produced a
+silent zero came from someone naming a field that does not exist — `author:` when the key
+is `authors`, `date:` when there is no date qualifier, `topic:` against prose sentences.
+A form that says "Date:" while writing `published_date` teaches the wrong word to the one
+audience guaranteed to be looking at it.
+
+Current state of the web form (`html/js/forms.js`): six of seven labels already match
+their field exactly in title case — Filename/`filename`, Path/`path`, Title/`title`,
+Authors/`authors`, Topic/`topic`, Shelf/`shelf`. Only "Date" did not. Changed to
+"Published Date", which maps unambiguously to `published_date` and keeps the existing
+title-case convention; use the literal `published_date` instead if the snake_case is
+wanted verbatim.
+
+**Rule for the MCP elicitation schema:** each field's `title` is its metadata key in title
+case, and nothing is labelled with a word that is not a real key. The same applies to any
+hit record returned by `search_documents` (§1.2) — if a result displays "Date", a user
+will reasonably try `date:` and get nothing.
+
 ### 1.3 Wire into `mcp_server/server.py` and test from Goose
 
 Follow the pattern already proven for the plot App. Checklist from that work that applies

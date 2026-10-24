@@ -280,7 +280,8 @@ common field is the query text. `source` was therefore not a filter but a discri
 deciding which other parameters were legal, which a flat tool signature cannot express. The
 full argument and its four consequences are in `yada-document-mcp-design.md` §2.1.
 
-The schema-tax argument for one tool (the migration plan puts the surface at 15-17k tokens)
+The schema-tax argument for one tool (a figure attributed to the migration plan, which
+does not contain it — see `yada-document-mcp-design.md` §2.2)
 survives but is weak: the two tools publish three filters each rather than six between them,
 so the filter half of the tax is unchanged and only the shared `query`/`field`/`limit` block
 is duplicated.

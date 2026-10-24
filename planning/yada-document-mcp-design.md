@@ -103,8 +103,10 @@ meaningless half the time and a `hits` list that was structurally always empty.
 
 `source` is gone: the tool name carries it.
 
-Cost of four tools over two: **+596 tokens** of schema across both stores, about 4% of the
-15-17k tax. Measured 2026-10-18.
+Cost: the four tools publish **4,770 tokens** in `tools/list` — 1,308 of names,
+descriptions and input schemas, 3,462 of output schemas. Splitting search from describe
+accounts for **+1,208** of that over a two-tool surface. Measured 2026-10-24 against the
+exact signatures above and the §3 contract below, `mcp` 2.3.0, `cl100k_base`.
 
 ### 2.1 Naming
 
@@ -141,8 +143,13 @@ modes.
 Splitting makes `query` **required** on `search_*`, which is the schema finally saying the
 obvious thing: you must state what you are looking for.
 
-The cost is +596 tokens of schema across both stores, about 4% of the 15-17k tax. Measured
-2026-10-18.
+The cost is **+1,208 tokens** of published schema over a two-tool surface, against 4,770
+for the four tools in total. Measured 2026-10-24.
+
+No percentage is given because there is no sourced figure for the whole tool surface to
+divide by. An earlier version compared this to a "15-17k schema tax" attributed to
+`yada-mcp-migration-plan.md`; that document contains no such number. Compute the share
+against whatever surface the client actually loads.
 
 There is also a plain naming argument, which is how this surfaced: with one merged tool
 there is no name for the document-search half. A capability you cannot name separately is

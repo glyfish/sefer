@@ -676,6 +676,31 @@ it is produced from the rows, not parsed into them:
 | Stribling | 3455 | Troy Stribling, W. Troy Stribling |
 ```
 
+**The vocabulary carries per-field coverage, because the schema is not uniform.** A document
+store validates value types, not record shape, so every chunk carries its own keys and
+uniformity is a convention the loader maintains rather than something Chroma enforces.
+Measured 2026-10-24: **11 of 16** keys are on every github chunk, **10 of 16** on every
+research_library chunk. The gaps are four different things:
+
+| kind | example | what it means |
+| --- | --- | --- |
+| structural | `h1` 39%, `h3` 2.3% | correct — a document with no H3 has no `h3` |
+| failure gap | `commit` 99.87% | 522 chunks lost it; a loader bug |
+| era split | `document_date` 2.5% | two loader versions; fixed in code, survives in data |
+| value vs absence | `ext == ""` | present but empty — §4's token |
+
+**Why it belongs in the vocabulary: a filter on a partial field silently excludes the chunks
+that lack it.** `{"commit": X}` can never reach those 522, and nothing in the result would
+say so. Coverage is already derivable — the sum of a field's value counts against the chunk
+total — so recording it costs nothing, and a field below 100% states it in its generated
+description: *"present on 99.87% of chunks; 522 have no commit metadata and cannot match
+this filter."*
+
+None of the six filters this design exposes is partial today — `account`, `repo`, `ext`,
+`authors`, `title`, `shelf` are all at 100%. The rule is here so that adding a seventh does
+not quietly reintroduce the silent-exclusion failure, and so `describe_*` can say which
+fields are safe to filter on.
+
 **One file, four consumers.** The vocabulary document is the single source for everything
 that needs to know what values exist:
 

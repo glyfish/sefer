@@ -425,9 +425,12 @@ Chroma metadata accepts lists, and `$contains` matches an element (verified, chr
 **7 of 19** today where only sole authors can be matched exactly — and the vocabulary gets
 *smaller*: 191 tokens for 27 individual names against 250 for 19 comma-joined strings.
 
-Caveats, all verified: `$contains` matches a whole element, never a substring within one, so
-resolution is still needed to map `"Matthaeus"` onto both stored spellings
-(`W. H. Matthaeus` 190 chunks, `William H. Matthaeus` 166) and `$or` them. And `$eq`/`$in`
+**The list carries surnames too** — `["Troy Stribling", "Stribling", ...]` — which makes
+`$contains "Matthaeus"` work directly. A surname unifies the spelling variants: all five
+surnames covering more than one full name are the same person written differently
+(Goldstein, Matthaeus, Oughton, Stribling, Taleb), with zero genuine collisions. Vocabulary
+goes to 49 values / 293 tokens; the per-chunk list roughly doubles. Resolution survives as a
+fallback for misspellings and first-name-only references. And `$eq`/`$in`
 stop working on a list field, so query construction changes shape. See
 `yada-document-mcp-design.md` §4.
 

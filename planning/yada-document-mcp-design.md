@@ -417,10 +417,37 @@ values — and every author becomes reachable instead of only the **7 of 19** wh
 sole authors. The multi-author problem disappears: a caller names one contributor, not the
 whole list in the right order.
 
-**Resolution is still required**, for the reason it always was: `$contains` needs the exact
-element, and the same person is stored two ways — `W. H. Matthaeus` (190 chunks) and
-`William H. Matthaeus` (166). So `"Matthaeus"` resolves to both spellings and the query
-becomes `$or` of two `$contains`. Fragment matching never becomes native.
+**The list carries surnames as well as full names**, which makes the common case native.
+`["Troy Stribling", "Stribling", "William H. Matthaeus", "Matthaeus"]`. Then
+`$contains "Matthaeus"` matches directly — no resolution, no `$or`.
+
+The reason this works is better than convenience: **a surname unifies the spelling
+variants.** Measured on the live library, 27 full names reduce to 22 surnames, and every
+one of the five surnames covering more than one full name is *the same person written
+differently*:
+
+```
+Goldstein   ['M. L. Goldstein',  'Melvyn Goldstein']
+Matthaeus   ['W. H. Matthaeus',  'William H. Matthaeus']
+Oughton     ['S. Oughton',       'Sean Oughton']
+Stribling   ['Troy Stribling',   'W. Troy Stribling']
+Taleb       ['N. N. Taleb',      'Nassim Nicholas Taleb']
+```
+
+Zero genuine collisions. `$contains "Matthaeus"` therefore reaches both spellings in one
+term, which is precisely what resolution was invented to do.
+
+Cost: the vocabulary goes 27 values / 191 tokens → **49 / 293**, and the per-chunk list
+roughly doubles, 1.2 → 2.4 entries. A describe publishes the **27 full names** as the
+canonical vocabulary; the field description says surnames also work, so the output stays
+legible without hiding the capability.
+
+**Resolution survives as a fallback, not the primary path.** It still handles what is
+neither an exact full name nor an exact surname — a misspelling, a truncation, a
+first-name-only reference (`"Nassim"` matches nothing, since only the full name and the
+surname are indexed). And a future document by a *different* Goldstein would make that
+surname genuinely ambiguous; both would match, which is visible in `filters_resolved`
+rather than silent, and the full name stays available to disambiguate.
 
 **What it costs.** `$eq` and `$in` stop working on that field, so query construction changes
 shape — `$or`-of-`$contains` rather than `$in` — and any code doing exact author-set matching

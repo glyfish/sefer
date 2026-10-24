@@ -827,5 +827,14 @@ Steps 1–3 are not MCP work and can be built and measured before any protocol c
   list should cut looser — §2.1 of `document-search-tasks.md`, not this document.
 - **Deduplication.** Three of eight github chunks for one query were the same file. Invisible
   inside prose; conspicuous in a displayed list. Collapse by `path`, keep the best score.
+- **Elicitation versus `json_response`, for the load forms.** Verified 2026-10-24, having
+  previously been relayed unverified: `streamable_http.py:254` sets
+  `can_send_request = not is_json_response_enabled`, so with `json_response=True` the server
+  cannot issue requests back to the client — which is what `ctx.elicit()` needs. yada sets
+  it (`JSON_RESPONSE`, `server.py:116`) because Goose's `Accept` header otherwise yields a
+  406. Not a wall: the flag is env-overridable via `YADA_MCP_JSON_RESPONSE=0`, `_fulfil`
+  (`mcpserver/resolve.py:571`) attempts the elicit rather than refusing upfront, and there
+  is an `elicit_url` variant (`context.py:229`) not yet examined. It is a transport tradeoff
+  to settle before the forms phase, and it does not touch search.
 - **Does a model orchestrate from the interface alone?** The premise of §1 is that schemas
   suffice. Untested, and testable the moment step 4 runs against Goose.

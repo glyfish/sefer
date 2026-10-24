@@ -50,9 +50,10 @@ async def search_code(
         "-- it is resolved against the index. If it matches nothing the result says so and "
         "lists the repositories that exist; no search is performed.")] = None,
     ext: Annotated[str | None, Field(description=
-        "File extension such as '.rb' or '.py', with or without the dot. Use '(none)' for "
-        "files that have no extension -- LICENSE, Makefile, README and similar. Resolved "
-        "as `repo` is. Note this store is 46% .ipynb notebooks.")] = None,
+        "File extension such as '.rb' or '.py', with or without the dot. OMIT this "
+        "parameter to search every extension. Pass '(no extension)' to search ONLY files "
+        "that have none -- LICENSE, Makefile, README, Rakefile and similar. Resolved as "
+        "`repo` is. Note this store is 46% .ipynb notebooks.")] = None,
     limit: int = 10,
 ) -> CodeHits:
 
@@ -394,9 +395,26 @@ with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `
 filtering, in both directions (the audit found LICENSE boilerplate is 25x over-represented
 in results), but no caller can type an empty string into `ext` and mean it.
 
-Resolution maps it to a token: **`"(none)"`**. A describe reports `"(none)": 1995`;
-`search_code(ext="(none)")` resolves back to `""`. Parentheses cannot occur in a real
-extension, so the token cannot collide with one.
+Resolution maps it to a token: **`"(no extension)"`**. A describe reports
+`"(no extension)": 1995`; `search_code(ext="(no extension)")` resolves back to `""`.
+Parentheses cannot occur in a real extension, so the token cannot collide with one.
+
+**The token says what it selects, not what is absent**, because those are opposite
+instructions and a model will act on whichever it reads:
+
+| call | means |
+| --- | --- |
+| `ext` omitted | search **every** extension — 415,006 chunks |
+| `ext="(no extension)"` | search **only** files that have none — 1,995 chunks |
+
+An earlier token, `"(none)"`, collapsed those: it reads as *"none specified"*, so a model
+wanting the first would plausibly pass it and silently get the second — 0.5% of the store,
+mostly LICENSE and Makefile. The same trap applies to any field where "unset" and "empty"
+are both meaningful; name the value for the set it picks out.
+
+Checked 2026-10-24: `ext` is the **only** filter on either store with this problem. The
+other five — `account`, `repo`, `authors`, `title`, `shelf` — have zero empty-string values
+and zero missing keys, so for them "unset" is unambiguous and no token is needed.
 
 This is the same shape as the `authors` problem one layer down — **the API vocabulary is
 not the storage vocabulary** — and it is handled the same way, in the resolver rather than

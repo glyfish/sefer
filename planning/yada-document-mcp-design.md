@@ -578,6 +578,31 @@ required one, which is what `filenames_for_repository` does today and the reason
 has to send the model after 103 strings (§1). A parameter whose only job is to classify a
 name the server can classify itself is a parameter the model can get wrong.
 
+**Resolution belongs to the operation, not to the parameter name.** `repo="glyfish"`
+resolving to an account is right for a *search*, where the result is ranked and bounded by
+`limit`. It is wrong for an *enumeration*, where the result is exhaustive:
+
+| | files | pages at 250 |
+| --- | --- | --- |
+| `troystribling` | 8,711 | 35 |
+| `glyfish` | 2,052 | 9 |
+| median repository | **41** | under one |
+
+Two hundred times the median repository, for a question nobody asked. So an enumerating
+tool must **refuse** an account name rather than resolve it — and the refusal is the useful
+answer, built from the same vocabulary a describe serves:
+
+```
+list_files(repo="glyfish")
+  -> status: "unresolvable_filter"
+     "glyfish is an account holding 22 repositories and 2,052 files.
+      Name one: alef, BAP3, Studium, website, ..."
+```
+
+The general rule: **before adding a resolution, ask what the result size does when it
+fires.** Ranked-and-bounded operations can afford a widening rule; exhaustive ones cannot,
+and should reuse the status vocabulary to say which narrower value to supply.
+
 **Values the storage layer cannot name.** `ext` is `os.path.splitext`'s output, so a file
 with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `configure`,
 `COPYING`, `.gitignore`: **1,995 chunks across 372 files**. That is a category worth
@@ -880,6 +905,12 @@ Steps 1–3 are not MCP work and can be built and measured before any protocol c
   store-specific filters**, because the cross-store case is exactly the case where none
   apply. That is what keeps it from reintroducing §2.3's problem, and it is why adding it
   later costs nothing — it is a third tool, not a change to these two.
+- **`list_files`** — file enumeration has no home. §2.8 retires
+  `filenames_for_repository`, but §2.4 keeps listing files as "a bounded, paginated
+  affordance of its own", and nothing provides it. Shape: `list_files(repo, path_prefix=None,
+  limit=250)`, with `repo` resolved as elsewhere **except that an account name is refused**
+  (above). No `account` parameter, so no lookup and no call-order instruction — which is the
+  fix for the signature defect §1 describes, rather than for the instruction that patches it.
 - **`ask_documents`** — a tool that runs `generate` server-side. Probably unnecessary,
   since the client is a model and hits now carry the metadata needed to cite. Decide once
   `search_code` and `search_research_library` are real.

@@ -373,7 +373,7 @@ question — *what is in what I just got* — at two scopes.
 
 Verified against the installed SDK on 2026-10-18, not assumed: a generic parameterised by
 publishes `$defs: ['LibraryMeta', 'Hit_LibraryMeta_']` with `hits.items` a `$ref` to the
-latter and `account`'s enum intact. Pydantic mangles the generic's name into
+latter and `shelf`'s enum intact. Pydantic mangles the generic's name into
 `Hit_GithubMeta_`, which is ugly in the published schema and harmless — it is a `$defs` key,
 never a value a model has to produce.
 
@@ -585,7 +585,7 @@ mostly LICENSE and Makefile. The same trap applies to any field where "unset" an
 are both meaningful; name the value for the set it picks out.
 
 Checked 2026-10-24: `ext` is the **only** filter on either store with this problem. The
-other five — `account`, `repo`, `authors`, `title`, `shelf` — have zero empty-string values
+other four — `repo`, `authors`, `title`, `shelf` — have zero empty-string values
 and zero missing keys, so for them "unset" is unambiguous and no token is needed.
 
 This is the same shape as the `authors` problem one layer down — **the API vocabulary is
@@ -705,8 +705,8 @@ total — so recording it costs nothing, and a field below 100% states it in its
 description: *"present on 99.87% of chunks; 522 have no commit metadata and cannot match
 this filter."*
 
-None of the six filters this design exposes is partial today — `account`, `repo`, `ext`,
-`authors`, `title`, `shelf` are all at 100%. The rule is here so that adding a seventh does
+None of the five filters this design exposes is partial today — `repo`, `ext`,
+`authors`, `title`, `shelf` are all at 100%. The rule is here so that adding a sixth does
 not quietly reintroduce the silent-exclusion failure, and so `describe_*` can say which
 fields are safe to filter on.
 

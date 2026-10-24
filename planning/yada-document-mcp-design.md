@@ -673,6 +673,33 @@ Parsing is a regex over `| a | b |` rows. The content is tabular by nature — v
 and for `authors` the full names a surname covers — so nothing is lost against JSON, and
 `path` is deliberately absent (§2.4) so no table runs to thousands of rows.
 
+**One file, four consumers.** The vocabulary document is the single source for everything
+that needs to know what values exist:
+
+| consumer | gets | cost |
+| --- | --- | --- |
+| generated tool descriptions (§2.6) | the small closed sets, **always in context** | 70 / 12 / 422 tokens |
+| an MCP **resource**, `yada://vocabulary/{store}` | the whole file, on demand | 1,135 tokens (library) |
+| `describe_*` | the same data, filterable | per call |
+| the server-side extractor's prompt | correct spellings and counts | — |
+
+The resource is what makes `title` (562 tokens) and `ext` (890) reachable at all — they are
+too large for a description but trivial in a file a client reads when it wants them. yada's
+server already declares `resources` and `MCPServer.add_resource` exists, so this is wiring,
+not new capability.
+
+**It is also the most direct lever on extraction accuracy**, which is the thing that has
+actually been failing. A model choosing a filter sees the real spelling — so it emits
+`Matthaeus`, not `Mathaeus` — and sees the counts, so `Stribling 3455` against `Bates 11`
+tells it which reading of an ambiguous request is plausible. Today the extractor produces
+`{'authors': 'Matthaeus'}` against a store where that matches nothing, with no way to know.
+
+**The resource is on-demand, not guaranteed.** Most clients make a resource user-selected
+rather than auto-loading it into context, which is exactly why the cheap sets stay in the
+descriptions and `describe_*` exists as a tool the model can call unprompted. The three
+paths are deliberate: always-present for the small sets, model-callable for anything, and
+client-readable for the whole picture.
+
 **Fingerprint it.** A manifest is a second source of truth about the index, and this
 codebase's signature failure is exactly that — `.repos` self-matching a `.gitignore`, `.keys`
 shadowing `.env`, `repository_names()` reading disk and reporting a repo with 0 indexed

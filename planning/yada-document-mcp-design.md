@@ -50,9 +50,11 @@ async def search_code(
     query: Annotated[str, Field(description=
         "What to look for, in plain language.")],
     repo: Annotated[str | None, Field(description=
-        "Repository name, or a fragment of one. Need NOT be complete or exactly as stored "
-        "-- it is resolved against the index. If it matches nothing the result says so and "
-        "lists the repositories that exist; no search is performed.")] = None,
+        "A repository name, or a fragment of one. Need NOT be complete or exactly as "
+        "stored -- it is resolved against the index. Two names mean an ACCOUNT rather "
+        "than a repository, and select every repository under it: 'troystribling' (79) "
+        "and 'glyfish' (22). Anything else is taken as a repository. If it matches "
+        "nothing the result says so and lists what exists; no search is performed.")] = None,
     ext: Annotated[str | None, Field(description=
         "File extension such as '.rb' or '.py', with or without the dot. OMIT this "
         "parameter to search every extension. Pass an empty string, or '(no extension)', "
@@ -553,6 +555,28 @@ expanded to the five full strings before the query is built.
 Adjacent and genuinely useful: `where_document={"$contains": "Matthaeus"}` **does** work, on
 the chunk text. That answers *"which documents mention him"*, a different question from
 *"which did he author"* — worth offering when an author resolution returns nothing.
+
+**One name, resolved to the right field.** `repo` accepts a repository *or* an account, and
+the server decides which. Measured: 2 accounts, 101 repositories, and **no name is both** —
+so a bare name is unambiguous and the rule is simply *"if it does not match an account,
+assume it is a repository"*.
+
+```
+repo="zgomot"        -> {"repo": "zgomot"}          one repository
+repo="glyfish"       -> {"account": "glyfish"}      all 22 under that account
+repo="zgom"          -> substring over repo names
+repo="nonesuch"      -> unresolvable_filter, with what exists
+```
+
+Naming both accounts in the description costs **7 tokens**. This is the same division of
+labour as author resolution: the client passes what the user said, the server adjudicates
+against the vocabulary and reports the decision in `filters_resolved` — here as
+`"account 'glyfish' -> 22 repositories"`.
+
+It is also why `account` is not a second parameter. An earlier version made it one and a
+required one, which is what `filenames_for_repository` does today and the reason that tool
+has to send the model after 103 strings (§1). A parameter whose only job is to classify a
+name the server can classify itself is a parameter the model can get wrong.
 
 **Values the storage layer cannot name.** `ext` is `os.path.splitext`'s output, so a file
 with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `configure`,

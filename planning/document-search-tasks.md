@@ -260,14 +260,15 @@ whose filters silently return nothing would make MCP testing uninterpretable.
 ### 1.0 The design is settled — see `yada-document-mcp-design.md`
 
 **Written 2026-10-18, revised the same day.** The tool surface, result contract, resolution
-rules, manifest and build order are specified there. In brief: **one tool per store** —
-`search_github` and `search_library` — each both searching and describing over that store's
-three filters; the client proposes filter values and the server resolves them against a
-20 KB manifest; a value that resolves to nothing is answered in 0.01 ms without searching.
-§§1.1-1.3 below are superseded by it; §1.2a (field titles name the metadata key) survives
-and is folded in.
+rules, vocabulary store and build order are specified there. In brief: **four tools** —
+`search_code` / `describe_code` / `search_research_library` / `describe_research_library`,
+because the two stores share no filter and the two verbs want different parameters. The
+client proposes filter values and the server resolves them against a vocabulary held in
+Postgres; a value that resolves to nothing is answered in 0.01 ms without searching.
+`authors` becomes a list carrying surnames as well as full names, so `$contains "Matthaeus"`
+matches both stored spellings natively.
 
-### 1.1 Decide the tool surface — SETTLED: one tool per store
+### 1.1 Decide the tool surface — SETTLED: four tools, see §1.0
 
 The info agents to expose: `CodeRepoAgent`, `ResearchLibraryAgent`, and — pending §2.4 —
 `FredDataInfoAgent` / `ETFDataInfoAgent`.

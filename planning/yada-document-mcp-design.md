@@ -24,12 +24,18 @@ because the server *resolves* every proposed value against the index and says wh
 discovery and (if wanted) schema enums all read one build artifact. There is no expensive
 metadata path, so no judgement about cost is required from the model.
 
-**No orchestration instructions.** The schema carries the meaning. Prose telling a model to
-call one tool before another is advisory and gets skipped — the existing
-`tool_spec(requires_context=["Call repository_names first..."])` did not prevent a model
-emitting `repo: yada`. This principle is what decided §2.3: a single merged tool could state
-that `repo` and `shelf` are mutually exclusive *only in prose*, and would have leaned on the
-exact mechanism this line rules out.
+**No parameter the request would not naturally contain.** A required argument a user never
+says aloud manufactures a lookup. The precedent is in the codebase:
+`filenames_for_repository(account, repository)` requires an `account`, so its description
+tells the model to call `repository_names()` first — which returns **103 strings and 973
+tokens** so the model can scan for `/zgomot` and split off the prefix. A round trip to
+recover something the server already knows. And it is not even needed: **101 repo names
+across 2 accounts with zero collisions**, so `repo` identifies a repository by itself.
+`account` is therefore not a filter here at all.
+
+Prose that sequences tool calls is usually a signature defect wearing a workaround. This is
+what decided §2.3 — a merged tool could state that `repo` and `shelf` are mutually exclusive
+*only in prose*, which is the same workaround one level up.
 
 ---
 
@@ -43,8 +49,6 @@ tells the model nothing.
 async def search_code(
     query: Annotated[str, Field(description=
         "What to look for, in plain language.")],
-    account: Annotated[Literal["troystribling", "glyfish"] | None, Field(description=
-        "Whose repositories. Omit to search both.")] = None,
     repo: Annotated[str | None, Field(description=
         "Repository name, or a fragment of one. Need NOT be complete or exactly as stored "
         "-- it is resolved against the index. If it matches nothing the result says so and "
@@ -59,7 +63,7 @@ async def search_code(
 
 
 async def describe_code(
-    account: ... = None, repo: ... = None, ext: ... = None,   # same three, same descriptions
+    repo: ... = None, ext: ... = None,          # same filters, same descriptions
 ) -> CodeVocabulary:
     """What is in the code store: the values available for every filter, under any
     filters given. `describe_code(repo="zgomot")` answers "what file types are in zgomot"."""
@@ -182,7 +186,7 @@ consequences, all avoided by keeping the tools separate:
   `filters_relaxed`. The mechanism built to stop silent widening would become a source of it.
 - **`metadata` could not be typed.** One tool forces `dict[str, str]` or a union the model
   must discriminate; two give each store a real model. Verified against the installed SDK:
-  a nested `GithubMeta` reaches `output_schema` under `$defs` with its `account` enum intact.
+  a nested `LibraryMeta` reaches `output_schema` under `$defs` with its `shelf` enum intact.
 - **It would need a `field` parameter, and that parameter would be meaningless.** To ask
   for a breakdown you must say of what, and `field="ext"` means nothing against
   research_library — so one merged tool must take a free string where these need nothing at
@@ -223,8 +227,8 @@ where one would have done.
 ### 2.5 Enums only where the set is tiny, closed and stable
 
 
-`account` (2) and `shelf` (5) cost 34 tokens between them and make a wrong value
-unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
+`shelf` (5) costs 21 tokens and makes a wrong value unrepresentable. It is now the only
+enum: `account` was dropped (see below). `repo` (101, 537 tokens), `authors` (19), `title` (64) and
 `ext` (190) stay free strings **deliberately** —
 an enum would force the model to reproduce `'Troy Stribling, William H. Matthaeus'` verbatim,
 when `Matthaeus` is the reasonable thing to say and resolution handles it.
@@ -368,14 +372,13 @@ filtered subset** and comes from the manifest. Same name because it answers the 
 question — *what is in what I just got* — at two scopes.
 
 Verified against the installed SDK on 2026-10-18, not assumed: a generic parameterised by
-publishes `$defs: ['GithubMeta', 'Hit_GithubMeta_']` with `hits.items` a `$ref` to the
+publishes `$defs: ['LibraryMeta', 'Hit_LibraryMeta_']` with `hits.items` a `$ref` to the
 latter and `account`'s enum intact. Pydantic mangles the generic's name into
 `Hit_GithubMeta_`, which is ugly in the published schema and harmless — it is a `$defs` key,
 never a value a model has to produce.
 
 ```python
 class GithubMeta(BaseModel):              # keyed EXACTLY as search_code's filters
-    account: Literal["troystribling", "glyfish"]
     repo: str
     ext: str
 
@@ -797,8 +800,10 @@ client never proposed.
 for prompt arguments and resource-template variables, i.e. human autocomplete. Verified
 against the installed SDK.
 
-**Instructing call order in the tool description.** Advisory. The precedent is already in the
-codebase and already failed.
+**Instructing call order in the tool description.** The codebase's one example
+(`filenames_for_repository`) exists only to supply a required `account` that `repo` makes
+unnecessary — the instruction is scaffolding around a signature defect, not a working
+mechanism. Fix the signature instead.
 
 **Enums for everything.** Only viable for small closed sets, must be regenerated with the
 data, and actively harmful for `authors` — see §2.

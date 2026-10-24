@@ -229,7 +229,51 @@ unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
 an enum would force the model to reproduce `'Troy Stribling, William H. Matthaeus'` verbatim,
 when `Matthaeus` is the reasonable thing to say and resolution handles it.
 
-### 2.6 Field descriptions describe the SERVER, not the caller
+### 2.6 Descriptions are generated from the manifest, and carry the real values
+
+A field whose values are small and closed publishes them **in its description**, and the
+description is **generated at server start from the manifest** (§5) rather than written by
+hand.
+
+Measured cost of embedding the live values as a comma-separated list:
+
+| field | values | tokens | embed? |
+| --- | --- | --- | --- |
+| `authors` (surnames) | 22 | **70** | yes |
+| `shelf` | 5 | 12 | yes, already an enum |
+| `repo` | 101 | 422 | yes |
+| `title` | 64 | 562 | no — point at `describe_research_library` |
+| `ext` | 189 | 890 | no — point at `describe_code` |
+
+**Two reasons this beats a `Literal`.** A value stays *proposable* when it is in prose, so
+resolution still applies and a near-miss is corrected rather than rejected — which matters
+for `authors`, where forcing exact reproduction was the wrong answer (§2.5). And the model
+can see the spelling, so it corrects its own typo instead of emitting one for the server to
+diagnose.
+
+**Generated, not written.** A hand-maintained list is a second source of truth and drifts.
+That has already happened here: `CodeRepoFilters.repo` carries a hand-written 101-value
+enumeration which the design review found is bypassed entirely, because the regex path
+returns before the LLM ever sees it. Generating from the manifest means the published
+description cannot disagree with the index, and it inherits the manifest's fingerprint check
+for free.
+
+**`authors` publishes surnames, and the description says to use one.** 22 surnames, 70
+tokens, and a surname unifies the spelling variants (§4), so instructing the model to name
+an author by last name makes the common case exact by construction:
+
+```
+"Author's last name, e.g. 'Matthaeus'. One of: Bates, Besag, Burgin, Busemeyer, Chu,
+ Gell-Mann, Ghosh, Goldstein, Green, Hartle, Jaynes, Martinez, Matthaeus, Meissner,
+ Oughton, Peters, Pothos, Richey, Roberts, Sokal, Stribling, Taleb. Give a full name
+ only to distinguish two authors who share a surname."
+```
+
+The escape hatch matters because surnames are unambiguous *today* — zero collisions across
+the 64 documents — and a future document by a second Goldstein would need the full name to
+separate them.
+
+### 2.7 Field descriptions describe the SERVER, not the caller
 
 
 Every description above states what yada will do with the value. None imposes a requirement
@@ -259,7 +303,7 @@ Two consequences:
   the list the plan review found is bypassed anyway, since the regex path returns before the
   LLM ever sees it. The description gets shorter *and* truer.
 
-### 2.7 What these tools replace
+### 2.8 What these tools replace
 
 
 Seven ad-hoc info tools exist today with no common shape — `repository_names()`,
@@ -270,7 +314,7 @@ vocabulary across both, and make filters **compose with description**, which no 
 can do.
 
 The cost is four schemas where there were seven — a smaller surface, but still four things
-to keep consistent. §2.6's rule is what holds them together: every field name is a metadata
+to keep consistent. §2.7's rule is what holds them together: every field name is a metadata
 key, so the same word means the same thing in all four.
 
 ---
@@ -589,7 +633,7 @@ E. T. Jaynes)… Map user language: 'blog'/'posts' → 'posts'"* — which is pr
 
 **The descriptions do not port unchanged.** They were written for a world with no resolver and demand exactness that resolution
 makes unnecessary — `repo` carries a 101-value enumeration, `account` says "must be exactly
-one of". Ported verbatim they would contradict §4. Rewrite each per §2.6.
+one of". Ported verbatim they would contradict §4. Rewrite each per §2.7.
 
 ```
 today :  extract 1.0s (haiku) + retrieve 1.0s + rank 2.0s + generate 7.1s (opus)  ~11s, 3 LLM calls

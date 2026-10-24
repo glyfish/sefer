@@ -396,6 +396,28 @@ correctly in 0.01 ms with no embedding and no ranker call.
 `'Brownian Motion'` documents. So *"no document has Einstein as an author"* is true while
 *"nothing about Einstein"* is false. Say the first, and offer the unfiltered search.
 
+**Chroma cannot substring-match metadata, so resolution is the only mechanism — not an
+optimisation.** Verified against chromadb 1.5.9 on 2026-10-24. The `where` grammar accepts
+`$gt, $gte, $lt, $lte, $ne, $eq, $in, $nin, $contains, $not_contains`, but on string
+metadata `$contains` returns **zero rows for every needle**, including the exact stored
+value and the empty string:
+
+```
+{"authors": {"$contains": "Troy Stribling, William H. Matthaeus"}}  -> 0
+{"authors": {"$contains": "Matthaeus"}}                             -> 0
+{"authors": {"$contains": ""}}                                      -> 0
+```
+
+It is evidently intended for `where_document` and/or list-valued metadata, and the
+validator shares one operator list. **It is accepted, raises nothing, and returns nothing**
+— the exact failure this design exists to eliminate, and the first thing anyone will reach
+for. Only `$eq` and `$in` over exact stored values work, which is why `"Matthaeus"` must be
+expanded to the five full strings before the query is built.
+
+Adjacent and genuinely useful: `where_document={"$contains": "Matthaeus"}` **does** work, on
+the chunk text. That answers *"which documents mention him"*, a different question from
+*"which did he author"* — worth offering when an author resolution returns nothing.
+
 **Values the storage layer cannot name.** `ext` is `os.path.splitext`'s output, so a file
 with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `configure`,
 `COPYING`, `.gitignore`: **1,995 chunks across 372 files**. That is a category worth

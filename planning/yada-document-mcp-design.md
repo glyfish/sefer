@@ -51,9 +51,9 @@ async def search_code(
         "lists the repositories that exist; no search is performed.")] = None,
     ext: Annotated[str | None, Field(description=
         "File extension such as '.rb' or '.py', with or without the dot. OMIT this "
-        "parameter to search every extension. Pass '(no extension)' to search ONLY files "
-        "that have none -- LICENSE, Makefile, README, Rakefile and similar. Resolved as "
-        "`repo` is. Note this store is 46% .ipynb notebooks.")] = None,
+        "parameter to search every extension. Pass an empty string, or '(no extension)', "
+        "to search ONLY files that have none -- LICENSE, Makefile, README, Rakefile and "
+        "similar. Resolved as `repo` is. Note this store is 46% .ipynb notebooks.")] = None,
     limit: int = 10,
 ) -> CodeHits:
 
@@ -189,8 +189,8 @@ applied one level up, to a wrong *combination*.
 — seven ad-hoc info tools with no common shape and a vocabulary disagreeing with itself
 (`repository` vs `repo`, `author` vs `authors`). Consistent naming across two tools fixes
 that as completely as one tool would, and composing filters with description still works:
-*"what file types are in zgomot?"* is `search_code(repo="zgomot")` with no `query`, a
-question no current tool can answer. Everything in §3–§6 is shared implementation behind
+*"what file types are in zgomot?"* is `describe_code(repo="zgomot")`, a question no current
+tool can answer. Everything in §3–§6 is shared implementation behind
 both tools, not duplicated.
 
 The one genuine loss is a single call spanning both stores. Nothing in the codebase asks for
@@ -258,13 +258,13 @@ Two consequences:
 Seven ad-hoc info tools exist today with no common shape — `repository_names()`,
 `filenames_for_repository(account, repository, …)`, `research_library_titles_by_metadata(author, topic, shelf)`,
 `etf_metadata_values(field)` — and their vocabulary disagrees with itself (`repository` vs
-`repo`, `author` vs `authors`). Two tools collapse them to one schema per store and one
+`repo`, `author` vs `authors`). Four tools collapse them to two schemas per store and one
 vocabulary across both, and make filters **compose with description**, which no current tool
 can do.
 
-The cost is that search and description share one entry point per store, so the intent rests
-on `query` versus `field` rather than on two tool names. That is a smaller ambiguity than the
-one §2.3 removes, and unlike it, it cannot produce a wrong answer — only a redundant one.
+The cost is four schemas where there were seven — a smaller surface, but still four things
+to keep consistent. §2.6's rule is what holds them together: every field name is a metadata
+key, so the same word means the same thing in all four.
 
 ---
 
@@ -395,17 +395,24 @@ with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `
 filtering, in both directions (the audit found LICENSE boilerplate is 25x over-represented
 in results), but no caller can type an empty string into `ext` and mean it.
 
-Resolution maps it to a token: **`"(no extension)"`**. A describe reports
-`"(no extension)": 1995`; `search_code(ext="(no extension)")` resolves back to `""`.
-Parentheses cannot occur in a real extension, so the token cannot collide with one.
+Resolution accepts **`""` or `"(no extension)"`** and applies `{"ext": ""}` for either. A
+describe reports the readable spelling, `"(no extension)": 1995`. Parentheses cannot occur
+in a real extension, so the token cannot collide with one.
 
 **The token says what it selects, not what is absent**, because those are opposite
 instructions and a model will act on whichever it reads:
 
 | call | means |
 | --- | --- |
-| `ext` omitted | search **every** extension — 415,006 chunks |
-| `ext="(no extension)"` | search **only** files that have none — 1,995 chunks |
+| `ext` omitted / `null` | search **every** extension — 415,006 chunks |
+| `ext=""` | search **only** files that have none — 1,995 chunks |
+| `ext="(no extension)"` | the same; the readable spelling a describe hands back |
+
+Both input spellings resolve to the stored `""`. Accepting the empty string is the
+storage-faithful reading — it is literally the value in the index — and the token exists so
+a describe can show something legible and copy-pasteable. Omission and emptiness stay
+distinct because JSON distinguishes `null` from `""`, and the result reports which was
+applied, so a caller that confuses them can see it in `filters_applied`.
 
 An earlier token, `"(none)"`, collapsed those: it reads as *"none specified"*, so a model
 wanting the first would plausibly pass it and silently get the second — 0.5% of the store,

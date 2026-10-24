@@ -50,8 +50,9 @@ async def search_code(
         "-- it is resolved against the index. If it matches nothing the result says so and "
         "lists the repositories that exist; no search is performed.")] = None,
     ext: Annotated[str | None, Field(description=
-        "File extension such as '.rb' or '.py', with or without the dot. Resolved as "
-        "`repo` is. Note this store is 46% .ipynb notebooks.")] = None,
+        "File extension such as '.rb' or '.py', with or without the dot. Use '(none)' for "
+        "files that have no extension -- LICENSE, Makefile, README and similar. Resolved "
+        "as `repo` is. Note this store is 46% .ipynb notebooks.")] = None,
     limit: int = 10,
 ) -> CodeHits:
 
@@ -216,7 +217,7 @@ where one would have done.
 
 `account` (2) and `shelf` (5) cost 34 tokens between them and make a wrong value
 unrepresentable. `repo` (101, 537 tokens), `authors` (19), `title` (64) and
-`ext` (189) stay free strings **deliberately** —
+`ext` (190) stay free strings **deliberately** —
 an enum would force the model to reproduce `'Troy Stribling, William H. Matthaeus'` verbatim,
 when `Matthaeus` is the reasonable thing to say and resolution handles it.
 
@@ -387,6 +388,26 @@ correctly in 0.01 ms with no embedding and no ranker call.
 `'Brownian Motion'` documents. So *"no document has Einstein as an author"* is true while
 *"nothing about Einstein"* is false. Say the first, and offer the unfiltered search.
 
+**Values the storage layer cannot name.** `ext` is `os.path.splitext`'s output, so a file
+with no extension stores `""` — `LICENSE`, `Makefile`, `README`, `Rakefile`, `configure`,
+`COPYING`, `.gitignore`: **1,995 chunks across 372 files**. That is a category worth
+filtering, in both directions (the audit found LICENSE boilerplate is 25x over-represented
+in results), but no caller can type an empty string into `ext` and mean it.
+
+Resolution maps it to a token: **`"(none)"`**. A describe reports `"(none)": 1995`;
+`search_code(ext="(none)")` resolves back to `""`. Parentheses cannot occur in a real
+extension, so the token cannot collide with one.
+
+This is the same shape as the `authors` problem one layer down — **the API vocabulary is
+not the storage vocabulary** — and it is handled the same way, in the resolver rather than
+by changing what is stored. The stored value stays faithful to `splitext`; the mapping is a
+total bijection with no staleness risk, which is what distinguishes it from the manifest
+(§5) and its fingerprint requirement.
+
+The counts in §5 include `""`: **190** extensions and **961** `repo→ext` pairs. An earlier
+pass reported 189 and 865 by filtering falsy values, which both understated the data and
+would have made §2.4's promise of the *complete* vocabulary false for 1,995 chunks.
+
 **What resolution makes impossible, and what it does not.** A single-field filter built from a
 resolved value can never match zero — the value exists by construction. A **conjunction** of
 individually-valid values still can:
@@ -423,8 +444,8 @@ build                      41 s         once, at index time
 ```
 
 Contents: per-field value→count maps, plus the cross-tabs worth having
-(`account→repo` 101 entries, `repo→ext` 865 entries). Distinct values are four orders of
-magnitude smaller than the chunk count — **2 accounts, 101 repos, 189 extensions, 9,529
+(`account→repo` 101 entries, `repo→ext` 961 entries). Distinct values are four orders of
+magnitude smaller than the chunk count — **2 accounts, 101 repos, 190 extensions, 9,529
 paths**; research_library is **19 authors, 64 titles, 5 shelves**.
 
 **Live faceting is not an option and that is why this exists.** Cost does not scale with what

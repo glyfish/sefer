@@ -273,6 +273,37 @@ The escape hatch matters because surnames are unambiguous *today* — zero colli
 the 64 documents — and a future document by a second Goldstein would need the full name to
 separate them.
 
+### 2.6a A write invalidates the generated descriptions
+
+Generating descriptions from the manifest (§2.6) creates a dependency the hand-written
+version did not have: **loading a research document can introduce an author or title the
+published schema does not mention.**
+
+The chain is `load_research_document` → new metadata values → manifest stale → generated
+descriptions stale → `tools/list` stale.
+
+**What actually goes stale is narrow.** `describe_research_library` reads the manifest, so it
+is correct the moment the manifest is refreshed. Resolution reads the manifest too, so a new
+author resolves and a search for it works. Only the **value list embedded in the tool
+description** lags — the model is told about 21 surnames when there are 22. Degraded
+discovery, not a wrong answer.
+
+**The sequence after a write:**
+
+1. Refresh that store's manifest. research_library costs **0.3 s**, so it runs inline in the
+   load tool. The code store costs **41 s**, but repositories are not added through a form —
+   its manifest regenerates as part of the loader run (§3.0 of the task doc).
+2. Regenerate the affected descriptions.
+3. Emit `notifications/tools/list_changed`.
+
+The SDK supports step 3: `ToolsCapability.list_changed` declares it and
+`ctx.notify_tools_changed()` (`mcp/server/mcpserver/context.py:136`) publishes it. **yada
+currently declares `{"listChanged": false}`** — verified against the running server — so
+that flips to `true` when the first generated description ships.
+
+A client that ignores the notification degrades to the lag described above, which is why
+this is worth doing but is not a blocker.
+
 ### 2.7 Field descriptions describe the SERVER, not the caller
 
 

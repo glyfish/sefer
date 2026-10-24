@@ -680,14 +680,20 @@ it is produced from the rows, not parsed into them:
 store validates value types, not record shape, so every chunk carries its own keys and
 uniformity is a convention the loader maintains rather than something Chroma enforces.
 Measured 2026-10-24: **11 of 16** keys are on every github chunk, **10 of 16** on every
-research_library chunk. The gaps are four different things:
+research_library chunk. The gaps are three different things:
 
 | kind | example | what it means |
 | --- | --- | --- |
-| structural | `h1` 39%, `h3` 2.3% | correct — a document with no H3 has no `h3` |
+| structural | `h1` 39%, `h3` 2.3% | correct — a document with no H3 has no `h3`, and only 3 of 64 documents nest that deep |
 | failure gap | `commit` 99.87% | 522 chunks lost it; a loader bug |
 | era split | `document_date` 2.5% | two loader versions; fixed in code, survives in data |
-| value vs absence | `ext == ""` | present but empty — §4's token |
+
+**An empty value is not a gap.** `ext` is on **100%** of chunks; 1,995 of them hold `""`,
+which is a valid value meaning *this file has no extension* — `LICENSE`, `Makefile`,
+`Rakefile`. It needs a name to be proposable (§4's `"(no extension)"` token), not coverage
+reporting. Keeping the two apart matters: a missing key means *cannot match*, an empty
+value means *matches a real set*, and conflating them is what produced the `ext=None`
+versus `ext=""` ambiguity §4 had to resolve.
 
 **Why it belongs in the vocabulary: a filter on a partial field silently excludes the chunks
 that lack it.** `{"commit": X}` can never reach those 522, and nothing in the result would

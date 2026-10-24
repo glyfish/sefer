@@ -836,5 +836,21 @@ Steps 1–3 are not MCP work and can be built and measured before any protocol c
   (`mcpserver/resolve.py:571`) attempts the elicit rather than refusing upfront, and there
   is an `elicit_url` variant (`context.py:229`) not yet examined. It is a transport tradeoff
   to settle before the forms phase, and it does not touch search.
-- **Does a model orchestrate from the interface alone?** The premise of §1 is that schemas
-  suffice. Untested, and testable the moment step 4 runs against Goose.
+- **Does a model orchestrate from the interface alone? — ASSUMED, pending data.** Decision
+  2026-10-24: build as if it does. Two reasons it is a reasonable bet. First, the
+  per-store split means routing is a tool choice, not a decomposition — the model picks
+  `search_code` or `search_research_library` from the list rather than reasoning its way to
+  a store, and a cross-store question is simply two calls, which is the loop it already
+  runs. Second, every place the design *could* have required the client to act first has
+  been removed: resolution means it need not call `describe_` to learn values, surnames mean
+  it need not know the stored spelling, and `unresolvable_filter` / `filters_relaxed` mean
+  it need not notice a filter failed.
+
+  So client decomposition affects **completeness, not correctness** — a poor one yields a
+  partial answer where the old behaviour yielded a confident wrong one.
+
+  **Measure it in §1.4** rather than arguing it: how often does the client call `describe_`
+  when resolution made it unnecessary, re-query after `no_match` with `available` in hand,
+  and search one store when the question spanned both? `search_all` and `ask_documents`
+  (above) are the fallbacks if those numbers are bad, which is why both are deferred rather
+  than rejected.

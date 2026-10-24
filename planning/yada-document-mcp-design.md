@@ -396,6 +396,37 @@ correctly in 0.01 ms with no embedding and no ranker call.
 `'Brownian Motion'` documents. So *"no document has Einstein as an author"* is true while
 *"nothing about Einstein"* is false. Say the first, and offer the unfiltered search.
 
+**`authors` should be stored as a list, which changes how it is queried.** Verified against
+chromadb 1.5.9 on 2026-10-24: metadata values may be lists, they round-trip as lists, and
+`$contains` then matches an **element**:
+
+```
+metadata {"authors": ["Troy Stribling", "William H. Matthaeus"]}
+  $contains "William H. Matthaeus"  -> matches        element match
+  $contains "Matthaeus"             -> 0              still no substring WITHIN an element
+  {"authors": "E. T. Jaynes"}       -> 0              $eq BREAKS on a list field
+  {"authors": {"$in": [...]}}       -> 0              so does $in
+  $or of $contains                  -> matches any    how several spellings are queried
+  $and of $contains                 -> matches all    "papers by both X and Y" -- new capability
+  $not_contains                     -> excludes
+```
+
+What it buys, measured on the live library: the vocabulary goes from **19 comma-joined
+strings (250 tokens)** to **27 individual authors (191 tokens)** — fewer tokens despite more
+values — and every author becomes reachable instead of only the **7 of 19** who happen to be
+sole authors. The multi-author problem disappears: a caller names one contributor, not the
+whole list in the right order.
+
+**Resolution is still required**, for the reason it always was: `$contains` needs the exact
+element, and the same person is stored two ways — `W. H. Matthaeus` (190 chunks) and
+`William H. Matthaeus` (166). So `"Matthaeus"` resolves to both spellings and the query
+becomes `$or` of two `$contains`. Fragment matching never becomes native.
+
+**What it costs.** `$eq` and `$in` stop working on that field, so query construction changes
+shape — `$or`-of-`$contains` rather than `$in` — and any code doing exact author-set matching
+breaks. Nothing does. And it is a metadata change, so it needs the §3.0 rebuild; until then
+the comma-joined form and `$in` resolution stand.
+
 **Chroma cannot substring-match metadata, so resolution is the only mechanism — not an
 optimisation.** Verified against chromadb 1.5.9 on 2026-10-24. The `where` grammar accepts
 `$gt, $gte, $lt, $lte, $ne, $eq, $in, $nin, $contains, $not_contains`, but on string

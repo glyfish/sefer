@@ -418,7 +418,20 @@ max iterations, and whether the judge is a separate cheap model or the generatin
 **[A]** Note `fred`/`etf` have **no** grade node at all, so "add a loop" is not uniform
 across the four stores.
 
-### 2.3 Fix the author contract properly
+### 2.3 Fix the author contract properly — **mechanism decided 2026-10-24: store a list**
+
+Chroma metadata accepts lists, and `$contains` matches an element (verified, chromadb
+1.5.9). Storing `authors` as a list makes every author reachable — **27 of 27**, against
+**7 of 19** today where only sole authors can be matched exactly — and the vocabulary gets
+*smaller*: 191 tokens for 27 individual names against 250 for 19 comma-joined strings.
+
+Caveats, all verified: `$contains` matches a whole element, never a substring within one, so
+resolution is still needed to map `"Matthaeus"` onto both stored spellings
+(`W. H. Matthaeus` 190 chunks, `William H. Matthaeus` 166) and `$or` them. And `$eq`/`$in`
+stop working on a list field, so query construction changes shape. See
+`yada-document-mcp-design.md` §4.
+
+Requires the §3.0 rebuild, since it is a metadata change.
 
 **[A]** 19 distinct `authors` values, 12 multi-author, 64 titles — small enough to
 enumerate. 690 of 4,875 chunks (14.2%) are unreachable by any author filter; single-author

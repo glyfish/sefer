@@ -914,8 +914,13 @@ Steps 1–3 are not MCP work and can be built and measured before any protocol c
 - **`ask_documents`** — a tool that runs `generate` server-side. Probably unnecessary,
   since the client is a model and hits now carry the metadata needed to cite. Decide once
   `search_code` and `search_research_library` are real.
-- **`grade_relative_floor = 0.5` is untuned** and was chosen for a generation cutoff. A hit
-  list should cut looser — §2.1 of `document-search-tasks.md`, not this document.
+- **`grade_relative_floor` — FITTED 2026-10-24, revalidate on real queries.** Was 0.50 by
+  eye, now **0.55**, measured against 63 labelled research_library queries (each document's
+  `topic` as the query, that document as ground truth) scored by F2: 0.796 / 0.802 / **0.815**
+  / 0.801 / 0.779 across 0.45-0.65. A genuine maximum — 24 of 63 queries keep a different set,
+  and it wins 97.0% of 2,000 bootstrap resamples. Elbow scored 0.745 and top-5 0.717. The set
+  is synthetic, so §1.4 should refit on real queries; scripts are kept at
+  `notebooks/documents/fit_grade_floor_*.py`.
 - **Deduplication.** Three of eight github chunks for one query were the same file. Invisible
   inside prose; conspicuous in a displayed list. Collapse by `path`, keep the best score.
 - **Elicitation versus `json_response`, for the load forms.** Verified 2026-10-24, having

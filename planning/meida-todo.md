@@ -116,3 +116,65 @@ says "6 providers over SSE".
 
 The architecture docs are a generation behind the integration plan. Not confirmed against a
 running server — worth checking `tools/list` and correcting all three in one pass.
+
+---
+
+## 4. Split the database into dev and prod
+
+**Verified 2026-10-25.** meida runs one database and has no concept of an environment:
+
+| | meida | yada |
+| --- | --- | --- |
+| databases | `meida` | `yada`, `yada_dev` |
+| selector | none | `YADA_ENV`, default `dev` (`apps/core/environment.py:38`) |
+| URL | `DEFAULT_MEIDA_DB_URL` (`environment.py:34`), one constant | `ENVIRONMENTS` map (`:31`) |
+| wrong-database guard | none | rejects a URL pointing at the other env (`:90-92`) |
+| startup check | none | `verify_database` refuses to start off-head (`:108`) |
+
+The data is what makes this worth doing. `series_catalog` holds 13,967 rows and
+`time_series_source` 11,621, all fetched from FRED, BLS, BIS and Tiingo — so a mistake costs
+API quota and keys to repair, not just time. Today there is nowhere to try a destructive
+migration or a loader rewrite except against the only copy.
+
+Copy yada's shape rather than inventing one: a `MEIDA_ENV` of `dev` | `prod` defaulting to
+**dev**, an `ENVIRONMENTS` map, the cross-environment guard, and a `verify_database` on the
+alembic head. The default matters more than the mechanism — it is the difference between
+forgetting the variable and losing the catalog.
+
+### The topology this has to fit
+
+A dedicated always-on server is on order, expected around 2026-12. Prod moves there, the
+database most likely with it, and dev stays on the laptop. So the connection shape inverts from
+the usual one:
+
+| | runs on | reaches the database by |
+| --- | --- | --- |
+| **prod** | the new server | `localhost` — app and database co-located |
+| **dev** | the laptop | over the network, to that same server |
+
+Both repos today hardcode `localhost` (`meida/environment.py:33`,
+`yada/apps/core/environment.py:34-35`). That constant stays **correct for prod** and becomes
+wrong for dev — the reverse of what a remote-prod move would normally do, and worth noting
+because it makes prod the simple case. What dev gains is a host, credentials and TLS.
+
+It also makes the cross-environment guard load-bearing rather than tidy. Both databases will
+be reachable from one connection, distinguished only by a name suffix, so pointing dev at
+`meida` instead of `meida_dev` becomes a one-character mistake against live vendor data.
+
+**No staging environment**, and the new hardware argues for this rather than against it. Dev
+and prod will already differ in machine, filesystem and network path — that separation is what
+staging exists to simulate, and it will exist for free. A third name adds a database on the
+prod host and tests nothing that dev does not already cover.
+
+When a migration genuinely needs rehearsing against real volume, restore a prod dump into dev:
+strictly more faithful than a long-lived third environment, and it cannot drift between
+rehearsals. Revisit only if something outside these four repos becomes a consumer.
+
+The cost is not neutral either. Every environment multiplies the work of each schema change,
+and the catalog has to be seeded or copied per environment.
+
+**The failure mode to design against is drift, not inadequate rehearsal.** Checked the same
+day: yada's prod sat at revision `0001` while dev was at `0003`, two migrations behind, and the
+only reason it surfaced was `verify_database` refusing to start. A third environment makes that
+more likely, not less. Whatever is built here, make the off-head check loud and make `dev` the
+default.

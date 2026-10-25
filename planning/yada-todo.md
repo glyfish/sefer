@@ -88,3 +88,101 @@ function uses matplotlib's default 100 — 2529×1967 against 1000×600, ~8× th
 information. Only `bar` and `multibar` do this; `fbar` and `positive_negative_bar` do not, which
 suggests it was never a deliberate policy. It costs real bytes now that images cross the wire as
 base64. Worth fixing in the same pass as the dark style, since both are edits to the same file.
+
+---
+
+## 2. Moving prod to the new server splits the stores from the database
+
+**Noted 2026-10-25.** A dedicated always-on server is on order, expected around 2026-12. Prod
+moves there with the database; dev stays on the laptop and reaches that database over the
+network (see `meida-todo.md` §4 for the connection shape).
+
+The Postgres half is routine. The problem is what does **not** live in Postgres:
+
+| | size | moves how |
+| --- | --- | --- |
+| `.db/github` | 11 GB | copy, or re-index on the new host |
+| `.db/fred` | 2.4 GB | copy, or re-fetch |
+| `.db/etf` | 1.3 GB | copy, or re-fetch |
+| `.db/research_library` | 120 MB | copy, or re-index |
+| `.repos` | 3.2 GB | re-clone — it is a git mirror, so this is free |
+
+### The hazard: the vocabulary describes a store it cannot see
+
+`document_vocabulary_combination` is derived by scanning a **local** Chroma directory, and
+after the move it is written to a database on **another machine**. Nothing ties a row to the
+filesystem that produced it, so two machines with different `.db` contents can write vocabulary
+into databases on one host, and each serves whatever it finds.
+
+The hazard is that the **store and its vocabulary can move independently**. A store copied
+without a rebuild leaves prod resolving against a stale vocabulary; rows written from a machine
+whose store differs leave it resolving against values its Chroma has never held. Either way a
+filter resolves cleanly and the search returns nothing, with nothing to say why.
+
+Rebuilding on prod after every copy (below) removes the first case by construction and the
+second by never copying rows at all. `is_stale` remains the backstop for the one thing left —
+a copy whose rebuild was skipped — and it is cheap: one check per process on first resolution,
+3.8 s on github and 69 ms on the library.
+
+### Decided: copy the store, rebuild the vocabulary, build in dev
+
+**2026-10-25.** Copy the stores to prod initially, keep loading in dev, and re-copy. Rebuild
+on prod only when that becomes tedious.
+
+This lasts longer than the 15 GB suggests, because size and change-rate run opposite ways:
+
+| store | size | changes |
+| --- | --- | --- |
+| `research_library` | 120 MB | often — every document added |
+| `etf` | 1.3 GB | on refresh |
+| `fred` | 2.4 GB | on refresh |
+| `github` | 11 GB | rarely — only on re-index |
+
+So **copy per store, never the whole `.db`**. The one touched most is 1% of the total.
+
+Three things the file layout dictates. A store is two monolithic files —
+`chroma.sqlite3` (6.6 GB for github) and the HNSW `data_level0.bin` (4.5 GB) — so rsync's
+delta pass saves little and each sync should be budgeted as a full transfer. Nothing may hold
+the store open during the copy, or the SQLite file tears; stop the prod server first. And
+`.repos` (3.2 GB) is a git mirror, so re-clone it rather than copying.
+
+**Rebuild the vocabulary on prod after the copy; do not copy the rows.** Copying a
+byte-identical store does yield an identical vocabulary, so dumping the rows would work — but
+it leaves two artifacts to keep paired, and pairing is the thing that breaks. Deriving the
+vocabulary where it is read makes divergence *unrepresentable* rather than merely detectable,
+and it holds however the store arrived: copied, rsynced, rebuilt, or restored from backup.
+
+Verified 2026-10-25, with no API keys set at all — the builder opens the collection without an
+embedding function, so `.get()` never embeds and prod needs no credentials to do this:
+
+| store | changes | rebuild |
+| --- | --- | --- |
+| `research_library` | often | **0.5 s** |
+| `github` | rarely | 36.5 s |
+
+The cost falls the right way round: the expensive rebuild belongs to the store that almost
+never changes.
+
+This also collapses the special case. The rule is **"after a store changes, rebuild its
+vocabulary"** — identical in dev and prod, whether the change came from a load or a copy, which
+is what should be wired into the loaders regardless (`rebuild` and `is_stale` still have no
+callers). Prod then needs no copy procedure of its own, only the same rule.
+
+**The signal to stop copying is frequency, not size** — and more sharply, the day prod needs
+to accept a write of its own. While every load happens in dev, copy is strictly simpler than
+keeping two stores independently correct.
+
+### The embedding switch now needs its own pass
+
+Copying means the stores are not rebuilt on arrival, so moving
+`text-embedding-ada-002` → `text-embedding-3-small` ($8.30 → $1.66) no longer rides along for
+free. Do it in dev as its own change and let the copy carry it to prod — which is the same
+procedure as any other load, so it costs nothing extra beyond the one rebuild.
+
+### Watch for, but do not pre-solve
+
+A locally-hosted model is wanted on the new machine eventually. Chat models slot into
+`llm_factory` behind the existing provider switches. **Embeddings do not** — the vector store is
+tied to the model that wrote it, so changing the embedding model is a full re-index of all four
+stores, not a configuration change. That makes it another reason to settle the embedding choice
+at move time rather than after.

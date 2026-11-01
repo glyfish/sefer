@@ -466,6 +466,31 @@ possible, and both repos then share one search surface instead of two.
 searches across FRED at all. That is the same "takes ids rather than listing" problem
 `series_catalog` was built to solve, arrived at from the other direction.
 
+### Decided: FRED-specific now, generalised when the others come over
+
+**Decided 2026-11-01 (user).** Build something specific to FRED rather than bending it into
+`series_catalog`. BLS, BIS and CDC Socrata are also API sources and will follow a similar
+route; **FRED gets updated when they are brought over**, not before. `series_catalog` keeps
+the file-derived sources — CDC NVSR, CDC WONDER, Clio-Infra, voteview.
+
+**One refinement the measurement adds: the split is not API versus files.** CDC Socrata is
+an API and **2,346 of its series are already in `series_catalog`** with full facets. What
+decides the fit is whether the source hands over structured facets or only prose.
+
+| source | fetched | facets come from | fit today |
+| --- | --- | --- | --- |
+| BIS | API (SDMX) | **native** — `BisSeries.dimensions: Dict[str,str]`, with `codelists` declaring the allowed values per dimension | fits as-is |
+| CDC Socrata | API | dataset columns — `state`, `sex`, `race`, `rate_type` | **already loaded**, 2,346 rows |
+| CDC NVSR / WONDER / clio / voteview | spreadsheets, PDFs | the sheet's own columns | the case it was built for |
+| BLS | API | **partial** — `Catalog` gives `survey_name`, `seasonality`, `measure_data_type`; the rest is positionally encoded in the series id and needs a per-survey decoder | partial |
+| **FRED** | API | **nothing** — prose titles only | **does not fit** |
+
+**So FRED is the hardest of the four, not the template for them.** BIS would drop into
+`series_catalog` today with no derivation at all. Designing the API-source pattern around
+FRED means designing for the worst case and the others fitting trivially; designing it
+around BIS means FRED will not fit it either. Worth knowing which way round the
+generalisation is being done before FRED is revisited.
+
 **It also converged on the same conclusions this session reached independently for FRED.**
 `series_catalog_concepts` is described as "the coarse map to pick a concept before
 searching within it" — the two-level topic browse measured in

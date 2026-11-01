@@ -473,11 +473,23 @@ searches across FRED at all. That is the same "takes ids rather than listing" pr
 route; **FRED gets updated when they are brought over**, not before. `series_catalog` keeps
 the file-derived sources — CDC NVSR, CDC WONDER, Clio-Infra, voteview.
 
-**One refinement the measurement adds: the split is not API versus files.** CDC Socrata is
-an API and **2,346 of its series are already in `series_catalog`** with full facets. What
-decides the fit is whether the source hands over structured facets or only prose.
+**What the four genuinely share is the contract, not the schema.** Each has a catalog whose
+metadata carries the information needed to retrieve the data. Beneath that they are
+architected very differently, and the differences do not reduce to API versus files — CDC
+Socrata is an API and **2,346 of its series are already in `series_catalog`** with full
+facets.
 
-| source | fetched | facets come from | fit today |
+meida already separates these two levels. The `retrieval` block is the uniform part — a row
+says which tool fetches it and with what arguments — while its *content* differs completely
+by source: `{'tool': 'cdc_series_data', 'concept': …, 'facets': {…}}` for live Socrata
+against `{'tool': 'timeseries_source_data', 'source': 'clio', …}` for a stored one. Same
+contract, unrelated shapes. That is the part worth standardising across FRED, BLS, BIS and
+Socrata; the catalog behind it can be shaped by whatever metadata each source actually
+publishes.
+
+**Where they diverge is discovery** — what makes a series findable once catalogued:
+
+| source | fetched | discovery metadata | shares `series_catalog`'s shape |
 | --- | --- | --- | --- |
 | BIS | API (SDMX) | **native** — `BisSeries.dimensions: Dict[str,str]`, with `codelists` declaring the allowed values per dimension | fits as-is |
 | CDC Socrata | API | dataset columns — `state`, `sex`, `race`, `rate_type` | **already loaded**, 2,346 rows |
@@ -485,11 +497,11 @@ decides the fit is whether the source hands over structured facets or only prose
 | BLS | API | **partial** — `Catalog` gives `survey_name`, `seasonality`, `measure_data_type`; the rest is positionally encoded in the series id and needs a per-survey decoder | partial |
 | **FRED** | API | **nothing** — prose titles only | **does not fit** |
 
-**So FRED is the hardest of the four, not the template for them.** BIS would drop into
-`series_catalog` today with no derivation at all. Designing the API-source pattern around
-FRED means designing for the worst case and the others fitting trivially; designing it
-around BIS means FRED will not fit it either. Worth knowing which way round the
-generalisation is being done before FRED is revisited.
+**So FRED is the hardest of the four on discovery, not the template for them.** BIS would
+drop into `series_catalog`'s shape today with no derivation at all. That does not argue for
+one table — it argues that a shared *retrieval* contract plus per-source catalogs is the
+thing to generalise, and that FRED's catalog needs a discovery layer the others get for
+free. Worth settling which of the two is being standardised before FRED is revisited.
 
 **It also converged on the same conclusions this session reached independently for FRED.**
 `series_catalog_concepts` is described as "the coarse map to pick a concept before

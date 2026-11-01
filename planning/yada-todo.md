@@ -424,8 +424,47 @@ metadata catalogs (FRED, Tiingo, BLS, BIS)". It has the schema and the tools:
 - **Three MCP tools** — `series_catalog_search`, `series_catalog_entry`,
   `series_catalog_concepts`.
 
-`source` defaults to `"cdc"` because CDC is the only source loaded. FRED belongs in the
-same table as `source='fred'`.
+`source` defaults to `"cdc"` because CDC is the only source loaded.
+
+### But the pattern was built for sources with no API, and FRED has one
+
+**Corrected 2026-11-01.** `series_catalog` exists for data assembled from downloaded PDFs
+and spreadsheets — CDC WONDER/NVSR, Clio-Infra, voteview — which cannot be enumerated at
+all. FRED can: `fred_category_children` and `fred_category_series` already walk its tree
+live. So FRED is not the case the pattern was built for, and whether it should reuse it is
+a real question rather than a relocation.
+
+Measured on the 13,967 rows actually loaded:
+
+| | meida's catalogue | FRED |
+| --- | --- | --- |
+| rows | 13,967 (clio 11,042, cdc 2,526) | **184,953** — 13x the whole catalogue |
+| `concept` | **primary**, from source table columns; 86 + 13 values | **does not exist** |
+| `facets` | **primary**; `state`, `sex`, `race`, `country`, `kind` | **does not exist** |
+| `title` | **derived** — `"alcohol binge (state=MA, sex=male, crude)"` | **primary** — FRED's prose, 133,163 distinct |
+| `series_id` | **constructed** — `cdc/alcohol_binge/hksd-2xuw/state=ma/sex=male/crude` | FRED's own opaque id |
+| `description` | **121 distinct of 13,967 — 0.9%** | `notes`, 28.8% distinct, 80.7% shared |
+
+**The direction of dependency is inverted.** In meida's catalogue concept and facets are
+primary and the title is rendered from them, which is why facet filtering works and why
+the description can be boilerplate. In FRED the prose is primary and concept and facets
+would have to be recovered *from* it — and lexical recovery was measured and fails: a
+trailing-geography rule collapses 184,953 series to only 72,281 topics, 82.4% of them
+singletons, with a "place" vocabulary that fills up with `2 to 30 Days, All Commercial
+Banks (DISCONTINUED)`.
+
+So the honest reading: FRED fits the `retrieval` half of the pattern exactly, and the
+`concept`/`facets` half not at all without manufacturing them.
+
+**Which reframes the topic layer.** Clustering plus LLM naming (~$0.36 one-time, measured;
+three of four conceptual queries to first place) is not a search nicety bolted onto FRED —
+it is the adapter that produces the `concept` column FRED lacks and CDC got for free from
+structured sources. If FRED is to reuse this pattern, that is the step that makes it
+possible, and both repos then share one search surface instead of two.
+
+**The gap it would close.** meida's FRED tools tree-walk one category at a time; nothing
+searches across FRED at all. That is the same "takes ids rather than listing" problem
+`series_catalog` was built to solve, arrived at from the other direction.
 
 **It also converged on the same conclusions this session reached independently for FRED.**
 `series_catalog_concepts` is described as "the coarse map to pick a concept before

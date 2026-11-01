@@ -476,3 +476,80 @@ nothing to decide now that cannot be decided by measurement later.
    same thing about meida's catalogues and leaves it open. Deciding it in two repos
    independently is how they diverge.
 4. **The 318 unparsed `frequency` strings** (§3.2).
+
+---
+
+## 9. The leaf-size requirement, and what it forces
+
+**Required 2026-11-01 (user):** a leaf node holds about **25 series**, so its contents can be
+evaluated visually. Measured against the catalogue as loaded (184,953 series, 881 FRED
+categories):
+
+| | |
+| --- | --- |
+| categories already at or under 25 | **187** of 881 |
+| categories over 25 | **694** |
+| derived levels needed: 1 | 582 categories |
+| derived levels needed: 2 | 112 categories |
+| leaf nodes required | **7,399–8,844** (floor from distinct series; upper from per-category sums, which double-count the 14% of series in several categories) |
+| derived interior nodes | ~8,881 |
+| naming cost at the measured $0.000156/name | **~$2.70**, or ~$4 after the pagination fix |
+
+Depth grows by one or two segments, not more. The cost is immaterial. The requirement is
+affordable.
+
+### It applies upward too, and FRED nearly passes already
+
+Of the 98 interior nodes in FRED's own tree, only **three** exceed 25 children:
+
+| children | node |
+| --- | --- |
+| **243** | `Countries` |
+| 53 | `Prices > Producer Price Indexes (PPI) > Commodity Based` |
+| 34 | `Money, Banking, & Finance > Exchange Rates > By Country` |
+
+All three are **faceted views, not topics** — which is the tell. Grouping 243 countries into
+regions is reference data, not clustering; the two oversized nodes beneath it are the same
+shape. So the spine needs a small amount of *reference-data* grouping, separately from the
+*semantic* subdivision the 694 oversized leaves need. Two mechanisms, not one.
+
+### The decision it forces: is a facet variant a series, or part of one?
+
+`Countries` is not a minor case. **61,834 series — 33% of the catalogue — are reachable only
+through `Countries > X`**, and the topics repeat across countries:
+
+```
+322 series / 161 countries   Consumer Price Index
+294 series / 147 countries   Population, Total
+204 series /  47 countries   Currency Conversions: US Dollar Exchange Rate
+```
+
+Subdividing inside each of the 243 countries means generating the same topic set 243 times.
+Measured both ways:
+
+| | leaves |
+| --- | --- |
+| country as a **level** — subcategorise within each country | 3,489 |
+| country as a **facet** — one topical tree, country filters | 1,336 |
+
+2.6x fewer nodes, and that figure *understates* it: the split was derived lexically, which
+only recovers a trailing `for <country>` and so caught just 4.1% of stems as spanning more
+than one country. Semantic clustering would collapse far more, since it does not depend on
+where the country sits in the prose.
+
+**So the requirement needs one word changed to mean what it is for.** A leaf of 25 series is
+only evaluable if those are 25 *distinct things*. "Consumer Price Index" across 161 countries
+is one thing to look at with 161 variants, not 161 things; a leaf holding 25 slices of one
+indicator satisfies the letter of the rule and defeats its purpose.
+
+**Proposed:** *a leaf holds about 25 distinct topics, with facet variants — country, state,
+frequency, seasonal adjustment — collapsed and counted beside them rather than as separate
+members.* That keeps the rule's intent, and it makes the facet columns load-bearing rather
+than decorative.
+
+### Consequence for sequencing
+
+This sits behind the pagination fix (`yada-todo.md` §5). Eighty categories hold 1,000 of up
+to 9,932 series, so leaf counts, cluster boundaries and generated names computed today would
+all be derived from a truncated sample — `Poverty` from 10% of itself. Derived subcategories
+built on truncated input are worse than none, because they read as authoritative.

@@ -481,8 +481,14 @@ nothing to decide now that cannot be decided by measurement later.
 
 ## 9. The leaf-size requirement, and what it forces
 
-**Required 2026-11-01 (user):** a leaf node holds about **25 series**, so its contents can be
-evaluated visually. Measured against the catalogue as loaded (184,953 series, 881 FRED
+**Required 2026-11-01 (user):** a leaf node holds **at most 25** series, so its contents
+can be evaluated visually. A ceiling, not a target — which matters, because a *mean* of 25
+is not a maximum of 25: flat k-means at `k = n/25` put 37% of leaves over the cap, holding
+56% of the titles. Reaching the ceiling needs recursive splitting (cluster, then re-cluster
+any child still over it), measured at **1.58x the leaf floor**, with leaves landing at a
+median of 16 and depth varying from 1 to 5 instead of a uniform 1–2. Being a ceiling also
+makes it assertable: `max(leaf_count) <= 25` is a test over the built tree, which a target
+could never be. Measured against the catalogue as loaded (184,953 series, 881 FRED
 categories):
 
 | | |
@@ -492,8 +498,27 @@ categories):
 | derived levels needed: 1 | 582 categories |
 | derived levels needed: 2 | 112 categories |
 | leaf nodes required | **7,399–8,844** (floor from distinct series; upper from per-category sums, which double-count the 14% of series in several categories) |
-| derived interior nodes | ~8,881 |
-| naming cost at the measured $0.000156/name | **~$2.70**, or ~$4 after the pagination fix |
+| derived interior nodes | ~224 |
+| naming cost at the measured $0.000156/name | **~$1.41** |
+
+**Superseded 2026-11-01 by the API discovery run** (`fc2f605`). The figures above were
+computed against the YAML export's 184,953 series and 881 categories. The real catalogue
+is 424,634 series across 1,058 fetchable categories, so they stand only as a floor:
+
+| | export | real catalogue |
+| --- | --- | --- |
+| series | 184,953 | **424,634** |
+| fetchable categories holding series | 881 | **954** |
+| already at or under 25 | 187 | **201** |
+| over 25 | 694 | **753** |
+| derived levels: 1 / 2 / 3 | 582 / 112 / 0 | **623 / 127 / 3** |
+| leaf floor | 7,399 | **16,986** |
+| leaves with the measured 1.58x cap overhead | 13,974 | **26,838** |
+| naming | $2.30 | **$4.31** |
+
+Three categories now need a third derived level, which the export had none of. The cost
+is still immaterial; the number of nodes is not, and it strengthens the case in the next
+section for clustering *within* a category rather than globally.
 
 Depth grows by one or two segments, not more. The cost is immaterial. The requirement is
 affordable.

@@ -77,7 +77,7 @@ orchestrator had to parse prose itself, which is among the things Goose's routin
 
 ## 3. The two traps a naive schema walks into
 
-### 3.1 `frequency` has 41 spellings for ~8 frequencies
+### 3.1 `frequency` has 46 spellings for exactly 8 frequencies
 
 Among series still running: `Quarterly` 13,338, but also `Quarterly, End of Quarter` 817
 and `Quarterly, End of Period` 292. An exact match on `'Quarterly'` silently drops 1,109
@@ -86,6 +86,11 @@ series.
 So **`frequency_class` is a stored column**, derived at load from the leading word, with the
 raw `frequency` kept beside it for display. Same treatment as `ext` normalisation — resolved
 once at write time, not guessed at query time.
+
+**Re-measured 2026-11-07 on the full 846,628-series catalogue:** 46 raw spellings (was 41 when
+this was written, against a quarter of the catalogue) collapsing to 8 classes. Annual alone is
+spelled 12 ways, monthly 8, quarterly 6. The ratio got worse as the catalogue grew, which is
+the argument for deriving the column rather than enumerating the strings in a filter.
 
 ### 3.2 "Currently relevant" must be measured in periods, not days
 
@@ -127,14 +132,38 @@ today is 2026, so `now() - interval '6 months'` returns almost nothing. A model 
 Every class lands in a 41–72% band; that spread is the evidence the calibration works, against
 annual's 0.3% under a flat cutoff.
 
+**Re-measured 2026-11-07 on the full 846,628-series catalogue, and the effect is larger than
+when this was designed:**
+
+| | flat `observation_end >= 2026-01-01` | `currently_relevant` |
+| --- | --- | --- |
+| **annual** (498,774 — 59% of the catalogue) | **1,523 (0.3%)** | **367,404 (73.7%)** |
+| monthly (220,789) | 175,544 (79.5%) | 138,158 (62.6%) |
+| quarterly (108,960) | 66,791 (61.3%) | 66,791 (61.3%) |
+| daily (11,478) | 10,620 (92.5%) | 9,966 (86.8%) |
+| weekly (3,631) | 2,037 (56.1%) | 1,491 (41.1%) |
+| **all** | **257,953 (30.5%)** | **585,251 (69.1%)** |
+
+A flat 2026 cutoff discards **327,298 series — 56% of what the period rule keeps**, and it
+takes almost the entire annual class with it. Annual grew from 46% to 59% of the catalogue when
+the regional subtree landed, so the failure mode this section was written to prevent got
+*worse*, not better, with scale. The per-class rule needed no adjustment: it is re-derived on
+every load, which is the property that made it survive a doubling of the data.
+
+The 41–72% band is now 41–87% once the two tiny classes are set aside, and those two are the
+`Open:` item below rather than a calibration failure — `other` (867 series, 6.6% relevant) is
+the unparsed-frequency bucket, and `biweekly` holds 16 series.
+
 - **p95, not max** — projections skew the tail. Annual's max is 2030-01-01 against a p95 of
   2024-01-01, so a max-anchored cutoff would sit at 2028 and return nothing.
 - **Two periods** — one for ordinary publication lag, one for the store's own staleness.
 - **Self-calibrating.** Re-derived on every load, so a fresher store moves every cutoff
   together and the definition never needs revisiting by hand.
 
-**Open:** 318 series (0.26%) have a frequency string the classifier does not parse, and land
-at 5% currently-relevant. Too few to matter for retrieval, enough to be worth one look.
+**Open:** series with a frequency string the classifier does not parse land in `other` at a
+much lower relevance rate than any real class. Was 318 series (0.26%) at 5%; re-measured
+2026-11-07 it is **867 series (0.10%) at 6.6%**. It shrank as a share while roughly tripling in
+count, so it is still too few to matter for retrieval and still worth one look.
 
 ---
 
@@ -150,7 +179,7 @@ CREATE TABLE fred_series (
     series_id            text PRIMARY KEY,
     series_title         text NOT NULL,
     units                text,
-    frequency            text,              -- raw, 41 spellings, for display
+    frequency            text,              -- raw, 46 spellings, for display
     frequency_class      text,              -- derived: daily|weekly|monthly|...  (§3.1)
     seasonal_adjustment  text,
     observation_start    date,
@@ -253,7 +282,7 @@ confident-wrong-answer shape this project keeps removing: a request for a real U
 returns *"no such fund"*. It belongs in `filters_applied`, with the excluded count, the way
 the document tools already report a narrowed search:
 
-```
+```text
 filters_applied: { currency: "USD (default)" }
 detail: "4,252 funds match. 15,203 more exist only on non-USD venues, excluded by
          the default -- pass currency=null to include them."
@@ -436,7 +465,7 @@ and refuses invented ones. What it cannot catch is a *real* series that is the w
 with 123,119 to choose from and titles that differ by one word, that is the live failure mode.
 So the chain is:
 
-```
+```text
 search  ->  [human picks]  ->  fetch  ->  create report  ->  plot
 ```
 
@@ -520,36 +549,84 @@ Three categories now need a third derived level, which the export had none of. T
 is still immaterial; the number of nodes is not, and it strengthens the case in the next
 section for clustering *within* a category rather than globally.
 
-Depth grows by one or two segments, not more. The cost is immaterial. The requirement is
-affordable.
+**Superseded again 2026-11-07 by the regional collection** (`deb6c71`). The deferred
+`U.S. Regional Data` subtree is now fetched, which doubles the catalogue and quintuples the
+subdivision work:
 
-### It applies upward too, and FRED nearly passes already
+| | export | non-regional | full catalogue |
+| --- | --- | --- | --- |
+| series | 184,953 | 424,634 | **846,628** |
+| categories holding series | 881 | 954 | **4,919** |
+| already at or under 25 | 187 | 201 | **313** |
+| over 25 | 694 | 753 | **4,606** |
+| derived levels: 1 / 2 / 3 | 582 / 112 / 0 | 623 / 127 / 3 | **4,424 / 179 / 3** |
+| leaf floor | 7,399 | 16,986 | **42,040** |
+| leaves with the 1.58x overhead | 13,974 | 26,838 | **~66,423** |
+| naming | $2.30 | $4.31 | **~$9.41** |
 
-Of the 98 interior nodes in FRED's own tree, only **three** exceed 25 children:
+The cost is still affordable and the depth claim still holds — 4,424 of 4,606 oversized
+categories need exactly one derived level. What changed is the proportion: **84% of the
+subdivision work is now regional**, and §9's third subsection below is the reason that is
+not simply more of the same work.
+
+### It applies upward too — and with regional data, FRED no longer nearly passes
+
+Of the **129** interior nodes in the non-regional tree, only **four** exceed 25 children:
 
 | children | node |
 | --- | --- |
-| **243** | `Countries` |
+| **245** | `International Data > Countries` |
 | 53 | `Prices > Producer Price Indexes (PPI) > Commodity Based` |
 | 34 | `Money, Banking, & Finance > Exchange Rates > By Country` |
+| 26 | `International Data > Institutions` |
 
-All three are **faceted views, not topics** — which is the tell. Grouping 243 countries into
-regions is reference data, not clustering; the two oversized nodes beneath it are the same
+(This table read 98 interior nodes and three violations until 2026-11-07. Both figures came
+from a partially walked tree; the fourth node and 31 more interior nodes were found by the
+full walk. The shape of the conclusion is unchanged.)
+
+All four are **faceted views, not topics** — which is the tell. Grouping 245 countries into
+regions is reference data, not clustering; the three oversized nodes beside it are the same
 shape. So the spine needs a small amount of *reference-data* grouping, separately from the
-*semantic* subdivision the 694 oversized leaves need. Two mechanisms, not one.
+*semantic* subdivision the oversized leaves need. Two mechanisms, not one.
+
+**Updated 2026-11-07.** With the regional subtree collected, the full tree has **385 interior
+nodes, 44 of which exceed 25 children** — and **40 of those 44 are a `Counties` list**:
+
+| children | node |
+| --- | --- |
+| **254** | `U.S. Regional Data > States > Texas > Counties` |
+| **245** | `International Data > Countries` |
+| 159 | `U.S. Regional Data > States > Virginia > Counties` |
+| 159 | `U.S. Regional Data > States > Georgia > Counties` |
+| 120 | `U.S. Regional Data > States > Kentucky > Counties` |
+
+This does not weaken the "two mechanisms" conclusion — it is the strongest evidence for it.
+Every one of the 40 new violations is a list of places, and grouping Texas's 254 counties is
+geography reference data (by metro, by region, alphabetically) with a correct answer that
+exists independently of this catalogue. Clustering county *names* semantically would produce
+groups with no meaning. The reference-data mechanism is no longer "a small amount" of the
+work; it is most of the interior-node work.
 
 ### The decision it forces: is a facet variant a series, or part of one?
 
-`Countries` is not a minor case. **61,834 series — 33% of the catalogue — are reachable only
-through `Countries > X`**, and the topics repeat across countries:
+`Countries` was measured here at **61,834 series — 33% of the catalogue — reachable only
+through `Countries > X`**. **Re-measured 2026-11-07: 25,750 series, 3.0% of 846,628.** The
+count fell because the cap now holds each country to one page, and the share fell much
+further because the catalogue quadrupled. 88,239 series sit under `Countries` in total, and
+FRED has roughly 7,690 more that the cap defers.
 
-```
+**The share is no longer the argument, and it never needed to be.** The facet case rests on
+topic repetition, not on how big the branch is — and the regional subtree is the same pattern
+an order of magnitude larger (4,173 categories, 529,976 memberships, measure x place). The
+topics repeat across countries:
+
+```text
 322 series / 161 countries   Consumer Price Index
 294 series / 147 countries   Population, Total
 204 series /  47 countries   Currency Conversions: US Dollar Exchange Rate
 ```
 
-Subdividing inside each of the 243 countries means generating the same topic set 243 times.
+Subdividing inside each of the 245 countries means generating the same topic set 245 times.
 Measured both ways:
 
 | | leaves |

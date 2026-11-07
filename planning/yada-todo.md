@@ -60,7 +60,7 @@ carrying a UI setting.
 
 In the App design (`yada-mcp-migration-plan.md` §5.4) the path already exists:
 
-```
+```text
 Goose  --ui/initialize-->  app (reads hostContext.theme)
 app    --tools/call-->     plot(request, theme="dark")      # zero-token, no model turn
 ```
@@ -377,7 +377,7 @@ climbing while Goose's resets, and the two quietly stop being addable. Naming th
 measurement keeps that honest, and reporting the increment next to it makes any divergence
 visible rather than silent:
 
-```
+```text
 yada backend: $0.0043 this call, $0.0871 since connect
 ```
 
@@ -522,7 +522,10 @@ should land as columns and facets on `series_catalog`, reached over MCP, not as 
 yada-local tables.
 
 Nothing is lost by leaving it in place meanwhile: it is behind no tool yet, and the Chroma
-`fred` store still serves `FredDataInfoAgent`.
+`fred` store still serves `FredDataInfoAgent` — and, less obviously,
+`series_metadata.catalog_metadata("fred", ...)`, which copies four fields out of Chroma into
+every FRED cache row. That second consumer means retiring Chroma is a cutover, not an agent
+swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
 
 ### What is still missing even in meida
 
@@ -541,8 +544,86 @@ Nothing is lost by leaving it in place meanwhile: it is behind no tool yet, and 
 - **Does yada keep any writable store?** The document stores (`github`,
   `research_library`) are yada's own content and have no other owner, so probably yes —
   the rule is one writer per database, not one database.
-- **How does discovery run?** A notebook writing to Postgres is still a person running a
-  cell by hand. Whether this wants a scheduled job, a CLI, or an MCP tool is undecided.
+- ~~**How does discovery run?**~~ **Answered 2026-11-07: a CLI.** `clients/bin/fred_metadata.py`
+  (`status` / `walk` / `fetch` / `all` / `resync`, with `--limit`, `--revisit`,
+  `--dry-run`). A notebook cannot resume, and a 45-minute paced pull that dies at 40 needs
+  to; the completeness record lives in `fred_category_scan` rather than in cell output.
+  `notebooks/data/fred_meta_data.ipynb` illustrates the API and proves the idempotency
+  properties, which is the part a notebook is good for. Whether it also wants a *schedule*
+  is still open — `resync` exists and is safe to run repeatedly, but nothing runs it.
 - **Which app owns the topic layer?** Clustering plus LLM naming (~$0.36 one-time,
   measured) produces derived data about meida's catalogue. It reads like meida's, but it
   is the first thing here that is neither a vendor fetch nor a mirror of one.
+
+### Status 2026-11-07 — the yada-side collection is finished
+
+The FRED catalogue is complete in yada's Postgres, collected from the API with no files in
+the middle. This does not resolve the ownership question above; it makes the handoff to
+meida concrete, since the procedure is now measured rather than proposed.
+
+| | |
+| --- | --- |
+| series | **846,628** (the figures earlier in this section — 184,953, 13x — were the YAML export's) |
+| categories | 5,201, 0 unreachable, 0 excluded |
+| memberships | 1,002,244 |
+| scans not `ok` | **0** |
+| reconciliation | `sum(api_series_count)` 1,052,462 vs `sum(fetched_series_count)` 1,000,709; the 51,753 gap equals the `page_limit` deferral exactly |
+| coverage | **99.1%** of FRED's 853,320 series, measured by enumerating all 337 releases |
+| known shortfall | 7,692 series, of which 7,690 are behind the deliberate country cap, identified by id |
+| cost | 10,701 paced requests, 73 minutes across two runs, $0 (FRED is free) |
+
+What changed in the argument above:
+
+- **The file hand-off is gone for FRED.** `fred_discovery.py` writes to Postgres in the same
+  pass that reads the API. `fred_catalogue.py`'s YAML readers (`source_files`, `iter_source`,
+  `read_source`, `build`) now have no callers and are dead code to remove; its helpers
+  (`frequency_class`, `currency_cutoffs`) are still live.
+- **`is_active` has its answer.** `currently_relevant` is computed for all 846,628 series
+  (585,251 true) from per-frequency p95 cutoffs, so meida's always-NULL column has a
+  populated equivalent to copy the method from.
+- **The derivation scale doubled, and split.** ~$4.29 for the non-regional half, ~$5.12 for
+  regional — and the regional scheme is **not settled**: county titles differ by place, not
+  by measure, so the semantic split would cluster on the wrong axis. See
+  [yada-fred-subcategory-procedure.md](yada-fred-subcategory-procedure.md) §4.4. BIS's SDMX
+  dimensions are what the right shape looks like, which strengthens the "shared retrieval
+  contract, per-source catalogs" reading rather than the one-table one.
+- **Still true:** the catalogue is in yada and should end up in meida. Nothing reads it from
+  the application yet, so moving it costs no rewiring today and will cost more later.
+
+**New, open: 1,000 held series belong to no release.** Enumerating all 337 releases yields
+853,320 series with **zero appearing in two releases**, so one-release-per-series is a measured
+property and the denominator needs no correction. Against that set, 845,628 of our 846,628 held
+series are accounted for and **exactly 1,000 are not listed by any release**.
+
+**Diagnosed 2026-11-07, and it is ours.** The roundness was the clue: 1,000 is exactly `PAGE`,
+the old export's page size. All 1,000 sit in **one** category — 34111,
+`Money, Banking, & Finance > Banking > Senior Credit Officer Opinion Survey` — which holds
+2,398 memberships against FRED's reported 1,398. The evidence is unambiguous:
+
+| | the 1,000 surplus | the 1,398 current |
+| --- | --- | --- |
+| `series_id` prefix | **all `ALLQ*`** | `CTQ3`, `CTQ1`, `SFQ7`, `OTCD`, `SFQ6` |
+| carry `notes` | **0 (0%)** | 1,398 (100%) |
+| FRED `series/release` | **`400 Bad Request`** | resolves |
+| max `last_updated` | 2025-03-27 | 2026-09-24 |
+
+FRED retired the whole `ALLQ*` family and replaced it with differently-prefixed series. The
+superseded YAML loader had written exactly 1,000 of them — its truncation limit — and
+**nothing in the fetch path deletes**, so they stayed. The never-delete rule is deliberate and
+correct: the source is ~10,700 paced requests and a partial run must leave the catalogue
+larger, never emptier.
+
+**The real finding is a blind spot in the reconciliation.** `fred_category_scan` compares
+`api_series_count` against `fetched_series_count` — what FRED reported against what *that run
+wrote*. It proves a fetch was complete and is structurally incapable of noticing rows that were
+already there, so `status='ok'` is simultaneously correct and uninformative about retired
+series. The missing half of the check is `held > api_series_count`.
+
+**Implemented**: `fred_discovery.surplus_categories`, surfaced by `fred_metadata.py status` as
+`surplus_categories` / `surplus_memberships`. Across 5,201 categories it returns exactly one
+row, the one above — so this is the only instance in the catalogue, not the first of many.
+
+**Still open: pruning.** The 1,000 rows are still there, and removing them is a separate pass by
+design. A surplus is evidence FRED dropped something, but a failed or capped fetch against
+partial data would look identical, so a prune needs a complete verified scan before it can be
+safe. Worth doing; not worth doing implicitly.

@@ -244,7 +244,9 @@ The agent tree is for interpreting intent, not for executing a known operation.
 
 ### PostgreSQL (SQLAlchemy Core + Alembic)
 
-Two tables, both reflected at startup rather than declared as ORM models.
+Reflected at startup rather than declared as ORM models. The public schema holds two cache
+tables, the FRED metadata catalogue, and reference prices; the trading tables live in their own
+schemas.
 
 **`time_series_cache`** — one row per cached series.
 
@@ -286,6 +288,18 @@ views `UNION ALL` the three modes with a `mode` column. `public.price_series` ho
 prices. Future domains (e.g. portfolios) follow the same pattern: own schema, same migration
 chain. The whole schema is one rolled-up alembic revision (`0001_initial_schema`).
 
+**FRED metadata catalogue.** Eight tables (`fred_series`, `fred_category`,
+`fred_series_category`, `fred_category_scan`, `fred_frequency_class`, and the three
+`fred_subcategory*` tables) hold a discovery index over FRED's 846,628 series, collected
+directly from the API by `apps/agentic/db/fred_discovery.py` and driven by
+`clients/bin/fred_metadata.py`. Its organising idea is a **reconciliation**: every fetch stores
+`api_series_count` beside `fetched_series_count`, and `status = 'ok'` is only reachable when
+they agree, so incompleteness is a queryable row rather than a silent success. A deliberate
+limit is recorded in `page_limit`, which is what distinguishes a capped category from a failed
+one. This replaces a YAML-and-Chroma path that was wrong four ways without symptom -- see
+[data-store-fred.md](data-store-fred.md). It is complete but **not yet wired to any agent**:
+FRED search still goes through ChromaDB.
+
 **Environments.** There is one database per environment -- `yada_dev` for `dev`, `yada` for
 `prod` -- selected by `YADA_ENV` (default `dev`, so nothing lands on production data by
 accident). `apps/core/environment.py` is the single resolver: the caches, `TradingDb`, and
@@ -295,9 +309,18 @@ is at the code's Alembic head with the trading schemas present.
 
 ### ChromaDB
 
-Persisted under `.db/`, one collection per catalog: **etf**, **fred**, **github**,
-**research_library**. Loaders live in `apps/agentic/core/document_loaders/`. These stores back
-both semantic search and the catalog metadata lifted into the relational cache.
+Persisted under `.db/`, one collection per catalog: **etf** (36,475), **fred** (145,679 rows
+for 123,119 distinct series — the grain is one per series-category pair and ~19,810 rows are
+duplicates, see [bugs.md](bugs.md)), **github** (415,006), **research_library** (4,875). Loaders live in
+`apps/agentic/core/document_loaders/`. These stores back both semantic search and the catalog
+metadata lifted into the relational cache.
+
+The **fred** collection is being superseded by the PostgreSQL catalogue above, which holds 6.9x
+more distinct series. Both are live: Chroma is still the only store `FredDataInfoAgent` queries, and --
+less obviously -- `series_metadata.catalog_metadata("fred", ...)` copies four fields out of it
+into every FRED cache row, so it feeds the cache as well as the agent. Retiring it is a
+two-consumer cutover, not an agent swap; the order is in
+[data-store-fred.md](data-store-fred.md).
 
 ---
 

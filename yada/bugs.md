@@ -61,13 +61,16 @@ set, wasting slots in a `k=50` window and crowding out distinct matches. A full
 rebuild also embeds ~16% more documents than necessary, which is real money and
 time given the corpus size.
 
-**Documentation drift.** [data-store-fred.md](data-store-fred.md) has enshrined the
-inflated number in two places, and both should be corrected alongside the fix:
+**Documentation drift — fixed 2026-11-07.** [data-store-fred.md](data-store-fred.md) had
+enshrined the inflated number in two places. Both now state the three counts and the grain
+explicitly and link here. The counts were re-measured independently against
+`.db/fred/chroma.sqlite3` and reproduce this entry exactly: **145,679 rows / 125,869 distinct
+`(series_id, category_id)` / 123,119 distinct series.**
 
-- Line 18 — `| Documents | ~145,700 (one per series) |`. Wrong twice: the count
-  includes the duplicates, and the grain is one per *(series, category)* pair, not
-  one per series.
-- Line 88 — "indexing embeds ~145k documents". Should be ~126k.
+The code defect below is **not** fixed — only the documentation of it. What the correction
+changes in practice: the Chroma store covers 123,119 series against the Postgres catalogue's
+846,628, so the gap between the two FRED stores is **6.9x, not the 5.8x** a naive row-count
+comparison gives.
 
 **To reproduce.** Open `.db/fred/chroma.sqlite3`, join `embedding_metadata` on `id`
 to collect each document's `series_id` and `category_id`, then compare three counts:

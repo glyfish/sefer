@@ -13,11 +13,29 @@ Reference implementation: `yada/apps/agentic/db/fred_discovery.py`,
 
 ## 0. Why there is a procedure at all
 
-FRED's own taxonomy stops above browsable size. Every one of the 134 categories holding
-500 or more series returns **zero children** from `category/children` — checked one at a
-time, no exceptions — and the largest holds **53,187 series**. So the nodes between a
-category and its series do not exist upstream. They are derived, or there is nothing to
-browse.
+FRED's own taxonomy stops above browsable size. **206 categories hold 500 or more series
+attached directly to them, and 142 of those return zero children** from
+`category/children`. The largest holds **53,187 series**. So for most of the oversized
+nodes, the levels between a category and its series simply do not exist upstream.
+
+**Corrected 2026-11-07.** This section previously claimed that *every* one of 134 such
+categories returned zero children, "checked one at a time, no exceptions". That check ran
+against a partially walked tree — the second full walk found 4,180 more categories — and it
+is wrong: 64 of the 206 do have children. The conclusion is unaffected and in fact better
+supported, because where children exist they hold almost nothing:
+
+| node | series at the node | in its children |
+| --- | --- | --- |
+| `Production & Business Activity > Housing` | 53,187 | **254 in 7 children (0.5%)** |
+| `National Accounts > Flow of Funds` | 46,124 | 2,359 in 17 children (5.1%) |
+| `Population, Employment, & Labor Markets > Productivity & Costs` | 9,633 | 1,110 in 2 (11.5%) |
+| `Production & Business Activity > Industrial Production & Capacity Utilization` | 2,672 | 7 in 1 (0.3%) |
+
+So the honest form of the claim is not "there are no subcategories" but **"the subcategories
+that exist do not carry the series"** — descending from Housing moves you from 53,187 series
+to a sibling set holding 254, leaving the pile untouched. Derived nodes are still the only
+way to get a browsable leaf; the argument just rests on where the series are attached rather
+than on an absence of children.
 
 The requirement they are built to: **a leaf holds at most 25 series**, so a person can
 read it and judge it by eye.
@@ -55,7 +73,23 @@ compute `category_path` from it with a recursive CTE. The two then cannot disagr
 - Report categories unreachable from the root; **do not delete them.** They may be
   leftovers from subtree fetches, and dropping catalogue rows on one walk turns a
   transient failure into data loss.
-- Live shape: **5,188 categories**, 0 unreachable, 8 real roots.
+- Live shape: **5,201 categories**, 0 unreachable, 8 real roots. 4,173 of them (80%) are
+  under `U.S. Regional Data`.
+
+**Record what the walk has *visited*, not only what it has *found*.** A category is found
+when its parent names it as a child, and visited when you ask it for its own children.
+Those are different events, and storing only the first makes a node the walk never reached
+indistinguishable from a genuine leaf — the same ambiguity that hid the original export's
+gaps. A `walked_at` timestamp resolves both: a resuming walk skips what it has visited and
+queues children from the database, so a run that dies continues past the previous frontier
+instead of restarting at it. In the regional collection that skipped 1,058 categories
+without spending a request.
+
+**Make resume-versus-refresh the caller's choice.** Skipping a visited category means not
+noticing children FRED has *added*. That is right for resuming an interrupted run and wrong
+for a periodic refresh, so the walk takes it as an argument. Defaulting to skip makes every
+later run a silent no-op; defaulting to revisit makes resume pointless. Neither is safe
+implicitly.
 
 ### 1.2 Stop at excluded subtrees, and record why
 
@@ -64,13 +98,22 @@ several thousand. Store the reason on the row.
 
 | excluded | size | reason |
 | --- | --- | --- |
-| `U.S. Regional Data` (3008) | 4,160 categories | states, counties, metros; `States` alone is 53 categories / ~80,000 series |
+| `U.S. Regional Data` (3008) | 4,173 categories | states, counties, metros; `States` alone is 53 categories / ~80,000 series |
 
 Keep the categories that an earlier unscoped walk already discovered. They cost nothing,
 they record that the branch exists, and keeping them means including regional data later
 is a *fetch*, not another hour of walking. **Do not mark a descendant that already holds
 series** — `Census`, `BEA` and `BLS Regions` came through the original export with data,
 and calling them excluded would contradict the rows beneath them.
+
+**This exclusion has since been lifted** — regional data was collected on 2026-11-07 and the
+exclusion table is now empty — which is the point of recording it as data rather than
+hard-coding a skip. The row above is kept as the worked example.
+
+**Reconcile exclusions in both directions.** Emptying the table has to *clear* the stored
+marks, not merely stop adding them. A one-way reconciler leaves a branch that is wanted
+again flagged as excluded, the pending-work query keeps skipping it, and the fetch reports
+success over data it never requested — the truncated-export failure in a new place.
 
 ### 1.3 Fetch series, paginated, reconciled
 
@@ -89,10 +132,21 @@ every resume forever. With it:
 > `api_series_count > fetched_series_count` **with** a `page_limit` is a choice.
 > The same inequality **without** one is a fault.
 
-Live result: **1,056 of 1,056 categories complete, 0 incomplete, 0 failed**, 2,359
-requests, 28 minutes — **424,634 series** and 477,489 memberships, against 186,379 from
-the export. 245 country categories carry `page_limit=1`, deferring 51,753 series that
-remain visible in `api_series_count`.
+Live result, after two runs (non-regional on 2026-11-01, regional on 2026-11-07):
+
+| | |
+| --- | --- |
+| categories complete | 5,201 of 5,201 — 0 incomplete, 0 failed |
+| series | **846,628** (against 186,379 from the export) |
+| memberships | 1,002,244 |
+| requests | 2,359 + 8,342 |
+| wall clock | 28 min + 45 min |
+
+The reconciliation closes exactly: `sum(api_series_count)` is 1,052,462 and
+`sum(fetched_series_count)` is 1,000,709, and the 51,753 difference equals the deferral
+recorded under `page_limit` to the row. Nothing is unaccounted for. 38 capped categories
+carry the shortfall, holding 7,690 distinct series we do not have — a number obtained by
+listing them, not by subtraction.
 
 ### 1.4 Rate and credentials
 
@@ -104,7 +158,7 @@ remain visible in `api_series_count`.
 
 ### 1.5 Never delete during discovery
 
-The source is ~2,400 paced requests, any of which can fail. Upsert, so a partial run leaves
+The source is ~10,700 paced requests, any of which can fail. Upsert, so a partial run leaves
 the catalogue larger and more correct, never emptier. Pruning series FRED has genuinely
 dropped needs a *complete* scan to be safe and is a separate pass.
 
@@ -297,6 +351,15 @@ derived rows is the only delete in the derivation — scoped to one category, ne
 
 ### 4.4 What is not solved
 
+- **Regional data is facet-shaped, and this scheme is not.** The semantic split clusters
+  series by title text. That works where titles differ by *what is measured*, and fails where
+  they differ by *where* — county titles are the same measure with a place name substituted,
+  so clustering groups Alabama's counties together instead of grouping unemployment measures
+  together. Regional data is 4,173 of 5,201 categories and 529,976 memberships, and it wants
+  a facet scheme (measure x place x time) rather than a derived tree. BIS's SDMX dimensions
+  are what that looks like when a provider supplies it natively. **Settle this before
+  spending the regional half of the naming budget in §5** — a tree built on the wrong axis is
+  not cheaper to discard than to skip.
 - **Name stability.** A rebuild regenerates names, so a bookmarked subcategory can be
   renamed under its id. If names must be durable, pin them and rebuild only the structure.
 - **Pruning series FRED dropped.** Needs a complete scan to be safe; not implemented.
@@ -309,22 +372,43 @@ derived rows is the only delete in the derivation — scoped to one category, ne
 
 ## 5. Cost and scale, measured
 
+Re-measured 2026-11-07, after the regional subtree was collected. The catalogue doubled,
+and the derivation work grew with it.
+
 | | |
 | --- | --- |
-| categories, total / fetchable / excluded | 5,188 / 1,058 / 4,130 |
-| series | 424,634 |
-| distinct titles | 293,210 (69.1%) |
-| categories needing subdivision | 753, covering 475,550 series |
+| categories, total / with series / excluded | 5,201 / 4,919 / 0 |
+| series | 846,628 |
+| memberships | 1,002,244 |
+| distinct titles | 659,829 (77.9%) |
 | largest category | 53,187 series → 3 derived levels |
-| leaf floor at 25 | 16,986 |
-| leaves with the 1.58× recursion overhead | ~26,838 |
-| discovery | 2,359 requests, 28 min |
-| embedding the whole catalogue | ~$0.10 |
+| discovery | 10,701 requests, 73 min across two runs |
+| embedding the whole catalogue | ~$0.20 |
 | naming, measured per name | **$0.000136** |
-| naming the whole catalogue | **~$4.20** |
+
+**Split by scheme, because only half of it is designed.** The semantic scheme in §2 was
+measured on non-regional data; regional data is facet-shaped and §4.4 is why that is not the
+same problem. Quoting one total hides that.
+
+| | non-regional | regional | whole |
+| --- | --- | --- | --- |
+| categories needing subdivision | 723 | 3,883 | 4,606 |
+| memberships covered | 470,329 | 529,345 | 999,674 |
+| leaf floor at 25 | 19,171 | 22,869 | 42,040 |
+| leaves with the 1.58× overhead | ~30,290 | ~36,133 | ~66,423 |
+| interior nodes | ~1,264 | ~1,508 | ~2,770 |
+| names to generate | ~31,554 | ~37,641 | ~69,193 |
+| naming cost | **~$4.29** | ~$5.12 | ~$9.41 |
+
+The non-regional figure is worth noting: it is **$4.29 against the $4.20 estimated from the
+424,634-series catalogue**, so the per-name cost model held as the catalogue doubled. The
+growth is volume, not a change in the economics.
 
 Measured on two live categories: 454 series → 43 nodes / 31 leaves, max leaf 25, mean 14.6,
 0 failures, $0.0059.
+
+**What is actually committed to:** the non-regional half, ~$4.29, is the run the measurements
+support. The regional half should wait on §4.4.
 
 ---
 

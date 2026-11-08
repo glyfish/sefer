@@ -141,7 +141,7 @@ dispatch needs branching rather than one call.
 
 ### 2.4 Notebook reads
 
-`notebooks/mcp/utils.py` reads `.inputSchema` / `.mimeType`; `notebooks/data/fred_time_series.ipynb`
+`notebooks/mcp/utils.py` reads `.inputSchema` / `.mimeType`; `notebooks/data/fred/fred_time_series.ipynb`
 and `tiingo_time_series.ipynb` read `.structuredContent` in live cells. These are **reads**, which
 break; constructor kwargs like `ImageContent(mimeType=...)` still validate via a Pydantic alias.
 

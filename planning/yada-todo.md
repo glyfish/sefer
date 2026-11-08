@@ -548,7 +548,7 @@ swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
   (`status` / `walk` / `fetch` / `all` / `resync`, with `--limit`, `--revisit`,
   `--dry-run`). A notebook cannot resume, and a 45-minute paced pull that dies at 40 needs
   to; the completeness record lives in `fred_category_scan` rather than in cell output.
-  `notebooks/data/fred_meta_data.ipynb` illustrates the API and proves the idempotency
+  `notebooks/data/fred/fred_meta_data.ipynb` illustrates the API and proves the idempotency
   properties, which is the part a notebook is good for. Whether it also wants a *schedule*
   is still open — `resync` exists and is safe to run repeatedly, but nothing runs it.
 - **Which app owns the topic layer?** Clustering plus LLM naming (~$0.36 one-time,
@@ -624,7 +624,7 @@ What changed in the argument above:
   whose titles share a long common prefix is detectable from the titles alone, before any
   model call. De-duplicating the names would not help: 11 distinguishable labels over
   arbitrary thirds of one undifferentiated pile is the same defect, better hidden. Written up
-  as procedure §4.5; found by `yada/notebooks/data/fred_subcategories.ipynb`.
+  as procedure §4.5; found by `yada/notebooks/data/fred/fred_subcategories.ipynb`.
 - **New, smaller, and a trap for the search tooling.** The concepts bridge works, but **not
   under `websearch_to_tsquery`**, which ANDs its terms and returns zero rows for every query
   the layer exists to answer. Ranked OR matching puts a sensible node first where lexical

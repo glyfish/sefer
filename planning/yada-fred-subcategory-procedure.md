@@ -491,7 +491,7 @@ and roughly a sixth of the tree that was just paid for is affected by it. Three 
    test is what §5 should gate the regional half on, rather than the regional/non-regional
    path prefix, which is now known to be the wrong discriminator.
 
-Found by `yada/notebooks/data/fred_subcategories.ipynb`, which is read-only and re-runnable
+Found by `yada/notebooks/data/fred/fred_subcategories.ipynb`, which is read-only and re-runnable
 against the live tree.
 
 ---

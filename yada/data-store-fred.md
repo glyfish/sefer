@@ -48,7 +48,7 @@ reconciliation rather than a schema.
 | Upstream source | the FRED API directly — no intermediate files |
 | Collector | `apps/agentic/db/fred_discovery.py` |
 | Entry point | `clients/bin/fred_metadata.py` |
-| Notebook | `notebooks/data/fred_meta_data.ipynb` |
+| Notebook | `notebooks/data/fred/fred_meta_data.ipynb` |
 | Series | 846,628 |
 | Categories | 5,201 |
 | Memberships | 1,001,244 |
@@ -379,7 +379,7 @@ not: it is a shape that occurs throughout the catalogue, and the fix — split b
 in the title, which FRED already supplies and the embedding discards — is the same fix in both
 halves. See section 4.4 of the procedure.
 
-`notebooks/data/fred_subcategories.ipynb` is where this was found; every cell is a `SELECT`, so
+`notebooks/data/fred/fred_subcategories.ipynb` is where this was found; every cell is a `SELECT`, so
 it can be re-run against the live tree at no cost.
 
 The procedure, both prompts verbatim, and the rule-by-rule rationale are written up in
@@ -394,7 +394,7 @@ the reason is that the record lives in `fred_category_scan` rather than in cell 
 is resumable, and every category's completeness is a queryable row. A notebook cannot resume,
 and a two-hour pull that dies at 90 minutes needs to.
 
-`notebooks/data/fred_meta_data.ipynb` therefore illustrates the API and proves the idempotency
+`notebooks/data/fred/fred_meta_data.ipynb` therefore illustrates the API and proves the idempotency
 properties against the live catalogue; `clients/bin/fred_metadata.py` is what actually collects.
 
 ---
@@ -536,7 +536,7 @@ Three consumers read the Chroma store, and they do not all need the same thing:
 | --- | --- | --- |
 | `FredDataInfoAgent` | semantic search over titles | Postgres FTS over `title_tsv`, plus the derived `fred_subcategory.concepts` for the vocabulary bridge |
 | `series_metadata.catalog_metadata("fred", …)` | four fields by `series_id` | a direct `fred_series` lookup joined to `fred_category` — exact, and 6.9× more series will resolve |
-| `notebooks/documents/fred_chroma_query.ipynb` | inspection | `notebooks/data/fred_meta_data.ipynb` |
+| `notebooks/documents/fred_chroma_query.ipynb` | inspection | `notebooks/data/fred/fred_meta_data.ipynb` |
 
 Order matters: `catalog_metadata` is the cheap one and can move first, since it is a keyed
 lookup with no ranking behaviour to preserve. `FredDataInfoAgent` should move only once the

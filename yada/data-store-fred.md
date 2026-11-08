@@ -57,10 +57,10 @@ reconciliation rather than a schema.
 
 | Table | Rows | Holds |
 | --- | --- | --- |
-| `fred_series` | 846,628 | One row per series: title, units, frequency, seasonal adjustment, observation bounds, `last_updated`, `popularity`, `notes`, plus a generated `title_tsv` for full-text search. |
-| `fred_category` | 5,201 | `category_id`, `category_name`, `parent_id` as FRED supplies it, a derived `category_path`, `excluded_reason`, and `walked_at`. |
-| `fred_series_category` | 1,001,244 | The membership edge. A series can sit in several categories, which is why memberships exceed series by ~18%. |
-| `fred_category_scan` | 5,201 | **The reconciliation.** One row per category: `api_series_count`, `fetched_series_count`, `pages`, `page_limit`, `status`, `error`, timings. |
+| `fred_series` | 854,318 | One row per series: title, units, frequency, seasonal adjustment, observation bounds, `last_updated`, `popularity`, `notes`, plus a generated `title_tsv` for full-text search. |
+| `fred_category` | 5,201 | `category_id`, `category_name`, `parent_id` as FRED supplies it, a derived `category_path`, and `walked_at`. |
+| `fred_series_category` | 1,052,462 | The membership edge. A series can sit in several categories, which is why memberships exceed series by ~18%. |
+| `fred_category_scan` | 5,201 | **The reconciliation.** One row per category: `api_series_count`, `fetched_series_count`, `pages`, `status`, `error`, timings. |
 | `fred_frequency_class` | 8 | The per-class currency rule, rebuilt from the data. |
 | `fred_subcategory` | 27,385 | The derived browsable tree: 21,602 leaves, 5,783 interior nodes, non-regional only. |
 | `fred_series_subcategory` | 469,329 | Series-to-leaf assignment for the derived tree, covering 417,133 distinct series. |
@@ -76,8 +76,7 @@ Every fetch records **two** numbers: what FRED said the category contains, and w
 wrote.
 
 ```python
-requested = api_count if page_limit is None else min(api_count, page_limit * PAGE)
-status = "ok" if len(fetched) >= requested else "incomplete"
+status = "ok" if len(fetched) >= api_count else "incomplete"
 ```
 
 `status = 'ok'` is only reachable when those agree. The consequence is that incompleteness
@@ -87,17 +86,18 @@ cannot be silent — it is a row you can query:
 SELECT count(*) FROM fred_category_scan WHERE status <> 'ok';
 ```
 
-A deliberate limit is recorded separately from a fault. `page_limit` stores the cap that was
-applied, so `api_series_count > fetched_series_count` means a **choice** when `page_limit` is
-set and a **fault** when it is not. The whole-catalogue check is that the gap between the two
-sums equals the deliberate deferral exactly:
+**The contract has no exceptions, which is the 2026-11-08 change.** `page_limit` used to sit
+beside these two numbers so that `api_series_count > fetched_series_count` could mean a
+*choice* rather than a *fault*. That distinction was real, and it cost a configurable way for
+data to be absent on purpose — findable only by whoever later debugged the gap and traced it
+to a flag nobody set. Removing it makes the whole-catalogue check an identity:
 
 | | |
 | --- | --- |
 | `sum(api_series_count)` | 1,052,462 |
-| `sum(fetched_series_count)` | 1,000,709 |
-| difference | 51,753 |
-| `deferred_by_cap` | 51,753 — identical, so nothing is unaccounted for |
+| `sum(fetched_series_count)` | 1,052,462 |
+| difference | **0** |
+| `count(*) WHERE status <> 'ok'` | **0**, across all 5,201 categories |
 
 ### The walk, and why it is resumable
 
@@ -137,12 +137,10 @@ is a cycle guard, not a FRED limit.
 - `walk` skips categories whose `walked_at` is set.
 - `fetch` skips categories whose scan is already `ok`.
 - series are upserted; memberships are inserted on-conflict-do-nothing.
-- `rebuild_paths` and `mark_exclusions` update only rows whose value actually differs.
+- `rebuild_paths` updates only rows whose value actually differs.
 
-`mark_exclusions` reconciles in **both** directions. Emptying the exclusion table has to
-*clear* the stored marks, or a branch that is wanted again stays invisible to
-`pending_categories` and the fetch skips it silently — the same class of defect as the
-truncated export.
+`pending_categories` has one condition: a scan that already says `ok`. A category is complete
+or it is pending, and nothing can mark it neither.
 
 ### What a full run costs
 
@@ -165,23 +163,35 @@ Measured 2026-11-07 over all 337 releases, 1,132 requests:
 | --- | --- |
 | FRED total (union over 337 releases) | **853,320** |
 | sum of per-release counts | 853,320 — identical, and **0 series appear in 2+ releases** |
-| held, and listed by a release | 845,628 — **99.1%** |
-| held, but listed by no release | **1,000** (see below) |
-| held, total | 846,628 |
-| missing | 7,692, of which 7,690 are under the capped country categories |
-| with `notes` | 774,931 (91.5%) |
-| `currently_relevant` | 585,251 (69.1%) |
+| held, total | **854,318** (measured) |
+| held, but listed by no release | **1,000** (the retired `ALLQ*` family; see below) |
+| held, less the retired family | 853,318 |
+| implied shortfall | **2** — 0.0002% of FRED |
+| `currently_relevant` | 587,138 |
+
+The last two rows are **inferred, not measured**. The release enumeration was run once, on
+2026-11-07, and has not been repeated; 853,318 assumes every series collected since is
+release-listed, which is likely but unverified. Re-running it is 337 releases and ~1,132
+requests if the 2 are ever worth chasing.
 
 The union and the sum agreeing exactly is worth stating, because it is the one thing that makes
 the arithmetic above trustworthy: it confirms one-release-per-series as a measured property
 rather than a documented claim, so the denominator has no double counting to correct for.
 
-**Almost all of the shortfall is one deliberate decision.** `International Data > Countries` and
-its 245 children are capped at one page each, because country data is better sourced from BIS,
-whose SDMX dimensions are native facets rather than strings to be parsed out of a title. 38
-capped categories carry the shortfall; the 7,690 series behind them were enumerated by id, not
-inferred by subtraction. The cap is recorded per category, so lifting it is a configuration
-change, not a re-derivation.
+**The shortfall was one deliberate decision, and it is gone.** Until 2026-11-08
+`International Data > Countries` and its 245 children were capped at one page each — 7,692
+series missing, 7,690 of them behind that cap. The standing justification was that country data
+is better sourced from BIS, whose SDMX dimensions are native facets rather than strings to be
+parsed out of a title. That argument is about *shape*, and a page cap is the wrong instrument
+for it: shape belongs in the derived layer, and the cap withheld an arbitrary slice rather than
+a branch.
+
+Arbitrary literally. No `order_by` is sent, so FRED's default applied and what survived was an
+alphabetical prefix of the series id — Germany kept everything up to `DEURGDPH` and nothing
+after. Ids are concept-prefixed, so that is a systematic cut **by concept**: `DEU*` kept,
+`LFU*`, `NGDP*` and `PRC*` dropped whole. Lifting it cost **108 requests and 86 seconds**, and
+brought the catalogue to the identity above. The 2 series still missing are not diagnosed and
+are 0.0002% of FRED.
 
 **The 1,000 held series that no release lists are diagnosed**, and the roundness of the number
 was the clue. All 1,000 sit in a single category — **34111, `Money, Banking, & Finance > Banking
@@ -206,8 +216,8 @@ retired. The other half of the check is `held > api_series_count`, now implement
 ```
 
 **Pruned 2026-11-08, and it now reads zero.** The check was built as reporting only, on the
-argument that a surplus is evidence FRED dropped something but a failed or capped fetch would
-look identical against partial data. That argument holds in general and did not apply here,
+argument that a surplus is evidence FRED dropped something but a failed fetch would look
+identical against partial data. That argument holds in general and did not apply here,
 because every independent signal agreed on the same 1,000 rows:
 
 | | the 1,000 pruned | the 1,398 retained |
@@ -572,5 +582,8 @@ retiring Chroma before wiring it would take FRED search offline.
   naming the key raises `FredApiError` rather than being retried as a rate limit. yada's stored
   key was unregistered for an unknown length of time and nothing noticed, because nothing in
   yada called the API.
-- **Country data is capped on purpose**, not by oversight — `page_limit_for` caps
-  `International Data > Countries` and its children at one page. BIS is the better source.
+- **There is no way to fetch part of the catalogue, deliberately.** `excluded_reason` and
+  `page_limit` were removed in `0012`. They carried volume decisions inherited from the YAML
+  export, taken when the data was collected by hand; collection is paced, resumable and
+  idempotent now, and the country cap they preserved saved 69 requests while withholding 7,690
+  series. A gap is always a fault, and the invariant that says so has no configuration.

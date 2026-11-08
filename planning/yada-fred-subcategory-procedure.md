@@ -129,28 +129,28 @@ For each non-excluded category, page `category/series` with `limit=1000`.
 - **Record `api_series_count` beside `fetched_series_count`.** This pair is the procedure.
   `status='ok'` only when they agree.
 
-**Deliberate caps get a `page_limit` column.** Countries stay at one page. Without the
-column a capped country reads `status='incomplete'` — alarming, wrong, and retried on
-every resume forever. With it:
+**There is no deliberate cap, and that is the stronger contract.** A `page_limit` column
+carried one from 2026-11-01 to 2026-11-08, so that the inequality could mean a choice
+rather than a fault. It is gone, and the inequality now means exactly one thing:
 
-> `api_series_count > fetched_series_count` **with** a `page_limit` is a choice.
-> The same inequality **without** one is a fault.
+> `api_series_count > fetched_series_count` is a **fault**, always. Nothing configures it
+> into a choice.
 
-Live result, after two runs (non-regional on 2026-11-01, regional on 2026-11-07):
+Live result, after three runs (non-regional 2026-11-01, regional 2026-11-07, the country
+remainder 2026-11-08):
 
 | | |
 | --- | --- |
 | categories complete | 5,201 of 5,201 — 0 incomplete, 0 failed |
-| series | **846,628** (against 186,379 from the export) |
-| memberships | 1,002,244 |
-| requests | 2,359 + 8,342 |
-| wall clock | 28 min + 45 min |
+| series | **854,318** (against 186,379 from the export) |
+| memberships | 1,052,462 |
+| requests | 2,359 + 8,342 + 108 |
+| wall clock | 28 min + 45 min + 86 s |
 
-The reconciliation closes exactly: `sum(api_series_count)` is 1,052,462 and
-`sum(fetched_series_count)` is 1,000,709, and the 51,753 difference equals the deferral
-recorded under `page_limit` to the row. Nothing is unaccounted for. 38 capped categories
-carry the shortfall, holding 7,690 distinct series we do not have — a number obtained by
-listing them, not by subtraction.
+The reconciliation closes as an identity: `sum(api_series_count)` and
+`sum(fetched_series_count)` are both **1,052,462**, difference **0**. That is what the
+removal bought — before it, closure meant "the gap equals the recorded deferral", which
+is a weaker statement that needed a second column to be checkable at all.
 
 ### 1.4 Rate and credentials
 
@@ -606,7 +606,10 @@ the facet shape it describes turned out to be present in the non-regional half t
   hierarchy FRED already supplies is one axis for free and the derived tree is needed only
   for the measure axis — which would make the regional half cheaper than the non-regional
   one rather than slightly dearer.
-- **One live inconsistency.** `International Data > Countries > United States` holds 2,790
-  series with no `page_limit`, because it was fetched in full while testing pagination
-  before the cap existed. The other 244 countries are capped at 1,000. The record is
-  accurate about what happened, but a re-fetch would cap it and the data would shrink.
+- **Resolved 2026-11-08.** `International Data > Countries > United States` held 2,790
+  series with no `page_limit` while the other 244 countries were capped at 1,000 — it had
+  been fetched in full 41 minutes before the cap existed, and `status='ok'` meant it was
+  never offered to a fetch again. That asymmetry is what made the cap indefensible rather
+  than merely stale: the one country anyone would drill into was uncapped *by accident*,
+  and its 151 derived nodes against a uniform 76 for every capped peer showed the cap was
+  halving browsable structure. The cap is removed and all 245 are whole.

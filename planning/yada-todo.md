@@ -563,14 +563,14 @@ meida concrete, since the procedure is now measured rather than proposed.
 
 | | |
 | --- | --- |
-| series | **846,628** (the figures earlier in this section — 184,953, 13x — were the YAML export's) |
-| categories | 5,201, 0 unreachable, 0 excluded |
-| memberships | 1,001,244 (after pruning 1,000 retired rows, below) |
+| series | **854,318** (the figures earlier in this section — 184,953, 13x — were the YAML export's) |
+| categories | 5,201, 0 unreachable |
+| memberships | 1,052,462 (after pruning 1,000 retired rows, below) |
 | scans not `ok` | **0** |
-| reconciliation | `sum(api_series_count)` 1,052,462 vs `sum(fetched_series_count)` 1,000,709; the 51,753 gap equals the `page_limit` deferral exactly |
-| coverage | **99.1%** of FRED's 853,320 series, measured by enumerating all 337 releases |
-| known shortfall | 7,692 series, of which 7,690 are behind the deliberate country cap, identified by id |
-| cost | 10,701 paced requests, 73 minutes across two runs, $0 (FRED is free) |
+| reconciliation | `sum(api_series_count)` and `sum(fetched_series_count)` both 1,052,462 — difference **0**, no column needed to explain a gap |
+| coverage | 853,318 of FRED's 853,320 series — **inferred**, not re-measured; the release enumeration was run once on 11-07 |
+| known shortfall | **2 series**, undiagnosed, 0.0002% of FRED |
+| cost | 10,809 paced requests, 74 minutes across three runs, $0 (FRED is free) |
 
 What changed in the argument above:
 
@@ -671,7 +671,7 @@ row, the one above — so this is the only instance in the catalogue, not the fi
 
 **Pruned 2026-11-08, and `surplus_categories` now returns 0 across 5,201 categories.** The
 check was deliberately reporting-only, on the argument that a surplus is evidence FRED dropped
-something but a failed or capped fetch against partial data looks identical. That argument
+something but a failed fetch against partial data looks identical. That argument
 holds in general; it did not apply here, because the scan was complete (`scans_bad: 0`) and
 five independent signals agreed on the same 1,000 rows — the surplus matched the `ALLQ%`
 prefix exactly (1,000 of 1,000, 0 elsewhere in the catalogue), FRED 400s on each, none carry
@@ -714,6 +714,31 @@ agent is the only path, and each entry needs its replacement demonstrably live f
 
 The live path today is still LangGraph: `api/main.py:137` constructs `OrchestratorAgent`
 for every request. Until that is false, none of this is legacy in practice.
+
+### The failure mode this section exists to prevent, demonstrated
+
+`excluded_reason` and `page_limit` were removed on 2026-11-08, and the way they survived is
+exactly what this pass has to watch for. Neither was legacy code in the usual sense — both
+were written *deliberately and well*, with a sound argument: a reader must be able to tell a
+deliberate omission from a failed fetch. What they actually carried was two volume decisions
+inherited from the YAML export being replaced, taken when the catalogue was collected by hand.
+
+The sequence is the lesson:
+
+1. **11-01** — both mechanisms created, to preserve the old implementation's decisions.
+2. **11-07** — "collect everything" decided. Applied to one of the two. The commit lifting the
+   regional exclusion does not mention the country cap, and `PAGE_LIMITS` was never edited again.
+3. **11-07** — the surviving cap given a *new* justification in the docs (BIS has native SDMX
+   facets) while the code comment still cited the volume reason deleted four lines above it.
+4. **11-08** — found only because someone asked what the column was for, and the answer did not
+   survive measurement: 69 requests saved, 7,690 series withheld, and the retained slice an
+   alphabetical prefix of the series id that no reader would choose.
+
+So the pattern is not "dead code lingers." It is **an inherited decision retained by default,
+then rationalized rather than re-decided** — and the rationalization was good enough to pass
+review twice. The question to ask of each candidate below is therefore not "is this used?" but
+*"was this chosen for the system we are building, or for the one we are replacing?"* Something
+can be live, defensible, documented, and still only exist because nobody revisited it.
 
 ### Candidates, with what has to be true before each one goes
 

@@ -565,7 +565,7 @@ meida concrete, since the procedure is now measured rather than proposed.
 | --- | --- |
 | series | **846,628** (the figures earlier in this section — 184,953, 13x — were the YAML export's) |
 | categories | 5,201, 0 unreachable, 0 excluded |
-| memberships | 1,002,244 |
+| memberships | 1,001,244 (after pruning 1,000 retired rows, below) |
 | scans not `ok` | **0** |
 | reconciliation | `sum(api_series_count)` 1,052,462 vs `sum(fetched_series_count)` 1,000,709; the 51,753 gap equals the `page_limit` deferral exactly |
 | coverage | **99.1%** of FRED's 853,320 series, measured by enumerating all 337 releases |
@@ -581,12 +581,58 @@ What changed in the argument above:
 - **`is_active` has its answer.** `currently_relevant` is computed for all 846,628 series
   (585,251 true) from per-frequency p95 cutoffs, so meida's always-NULL column has a
   populated equivalent to copy the method from.
-- **The derivation scale doubled, and split.** ~$4.29 for the non-regional half, ~$5.12 for
-  regional — and the regional scheme is **not settled**: county titles differ by place, not
-  by measure, so the semantic split would cluster on the wrong axis. See
+- **The derivation scale doubled, and split.** The non-regional half is **built**: 27,385
+  names, **$4.81**, 1 h 57 m at 8 concurrent calls, completed 2026-11-08, 723 categories, no
+  cap violations. Regional is projected at ~$5.63 and is **not settled**: county titles differ
+  by place, not by measure, so the semantic split would cluster on the wrong axis. See
   [yada-fred-subcategory-procedure.md](yada-fred-subcategory-procedure.md) §4.4. BIS's SDMX
   dimensions are what the right shape looks like, which strengthens the "shared retrieval
   contract, per-source catalogs" reading rather than the one-table one.
+
+  The §4.4 argument got stronger when the depth was measured. Regional categories already sit
+  **5 levels deep** in FRED's own tree (3,078 as `States > <State> > Counties > <County>`);
+  deriving under that reaches a median of 6 clicks and a maximum of 8, to browse data whose
+  natural shape is two selections. FRED's place hierarchy *is* one of the two facets, so a
+  facet scheme would get it free and need derived nodes only for the measure axis — making the
+  regional half cheaper than the non-regional one rather than dearer.
+- **The earlier $4.29 was wrong, and agreed with its predecessor by coincidence.** It was
+  presented as the cost model holding across a doubling ("$4.29 against the $4.20 estimated
+  from the 424,634-series catalogue"). Two errors happened to cancel: the node count counted
+  the leaf floor, which under-reports by a third, and the per-name cost was measured on
+  sparse leaves. The node count now simulates the recursion instead, and held up: across the
+  723 categories actually built it predicted **27,384 against 27,385**, exact for 93.4% of
+  categories individually, though with a long tail (worst case a third low) that makes it a
+  total to budget from rather than a per-category guarantee.
+- **Three defects in the derivation, found by measuring a built tree rather than reading the
+  code.** The splitter produced **depth 8** trees with singleton leaves for a 9,932-series
+  category (unbalanced k-means amplifies an uneven split into depth); `BRANCH_CAP` was
+  documented and unenforced, letting a node take 625 children, which affected 130 of 723
+  non-regional categories; and the tree *shape* was unversioned, so the two trial categories
+  would have read `ok` forever under a splitter nothing else uses. All three are fixed and
+  measured — see the procedure's §2.2. Cost of finding them: $0.09 of probe runs.
+- **New, and it revises the scope split: facet-shaped data is in the half that was built.**
+  Reading the finished tree shows **4,445 of 27,385 nodes (16.2%) share a name with a
+  sibling**, 366 categories affected, worst case 11 sibling leaves under one name. The cause
+  is not the namer: in those categories the member titles are identical except for a place
+  name at the end, so the title embedding is near-constant and there is no semantic axis to
+  split on. It concentrates in `Academic Data > Penn World Table 7.1` (44.3% of its nodes),
+  `International Data > Indicators` (24.0%) and `Housing` (14.6%).
+
+  §4.4 excluded the regional half for exactly this reason but framed it as a property of the
+  regional branch. The exclusion was right; the framing was not, and the consequence is that
+  **the gate on the regional spend should be a facet *test*, not a path prefix** — a category
+  whose titles share a long common prefix is detectable from the titles alone, before any
+  model call. De-duplicating the names would not help: 11 distinguishable labels over
+  arbitrary thirds of one undifferentiated pile is the same defect, better hidden. Written up
+  as procedure §4.5; found by `yada/notebooks/data/fred_subcategories.ipynb`.
+- **New, smaller, and a trap for the search tooling.** The concepts bridge works, but **not
+  under `websearch_to_tsquery`**, which ANDs its terms and returns zero rows for every query
+  the layer exists to answer. Ranked OR matching puts a sensible node first where lexical
+  title search returns nothing. Whoever wires FRED search will reach for the obvious operator
+  and conclude the layer is useless.
+- **Open: 38 unnamed nodes** from the run, 3 of them a category's own root. Recorded three
+  ways on purpose (placeholder name, `naming_failures`, run log), and `verify` exits non-zero
+  while they exist. Rebuilding the 30-odd affected categories costs a few cents.
 - **Still true:** the catalogue is in yada and should end up in meida. Nothing reads it from
   the application yet, so moving it costs no rewiring today and will cost more later.
 
@@ -623,7 +669,29 @@ series. The missing half of the check is `held > api_series_count`.
 `surplus_categories` / `surplus_memberships`. Across 5,201 categories it returns exactly one
 row, the one above — so this is the only instance in the catalogue, not the first of many.
 
-**Still open: pruning.** The 1,000 rows are still there, and removing them is a separate pass by
-design. A surplus is evidence FRED dropped something, but a failed or capped fetch against
-partial data would look identical, so a prune needs a complete verified scan before it can be
-safe. Worth doing; not worth doing implicitly.
+**Pruned 2026-11-08, and `surplus_categories` now returns 0 across 5,201 categories.** The
+check was deliberately reporting-only, on the argument that a surplus is evidence FRED dropped
+something but a failed or capped fetch against partial data looks identical. That argument
+holds in general; it did not apply here, because the scan was complete (`scans_bad: 0`) and
+five independent signals agreed on the same 1,000 rows — the surplus matched the `ALLQ%`
+prefix exactly (1,000 of 1,000, 0 elsewhere in the catalogue), FRED 400s on each, none carry
+`notes` against 100% of the retained, the retained prefixes are disjoint, and the retired rows
+stop at `observation_end 2025-01-01` against 2026-07-01.
+
+The delete is **reversible by construction**: only memberships were removed, so the 1,000
+`fred_series` rows remain and restoring them is one insert.
+
+```sql
+INSERT INTO fred_series_category (series_id, category_id)
+SELECT series_id, 34111 FROM fred_series WHERE series_id LIKE 'ALLQ%';
+```
+
+**Still open: 1,000 series now in no category.** That is the price of keeping the delete
+reversible. They are unreachable by browsing and still resolvable by id, which is arguably the
+right state for a retired series — but it is a state nothing checks for, and "a row no query
+reaches" is how the last three of these started. Either delete them from `fred_series` too, or
+add the check.
+
+**Also open: a general prune.** One verified category is a precedent, not a mechanism. A
+`resync` that notices FRED has retired a family should be able to act on it without a person
+assembling five signals by hand.

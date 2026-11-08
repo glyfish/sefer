@@ -515,7 +515,10 @@ can be evaluated visually. A ceiling, not a target — which matters, because a 
 is not a maximum of 25: flat k-means at `k = n/25` put 37% of leaves over the cap, holding
 56% of the titles. Reaching the ceiling needs recursive splitting (cluster, then re-cluster
 any child still over it), measured at **1.58x the leaf floor**, with leaves landing at a
-median of 16 and depth varying from 1 to 5 instead of a uniform 1–2. Being a ceiling also
+median of 16 and depth varying from 1 to 5 instead of a uniform 1–2. (That overhead, and
+that depth spread, were later found to be artefacts of unbalanced clustering rather than
+properties of the requirement — see the 2026-11-08 note at the end of this section. With a
+size-balanced split the floor *is* the answer and leaves land at 22–25.) Being a ceiling also
 makes it assertable: `max(leaf_count) <= 25` is a test over the built tree, which a target
 could never be. Measured against the catalogue as loaded (184,953 series, 881 FRED
 categories):
@@ -561,13 +564,23 @@ subdivision work:
 | over 25 | 694 | 753 | **4,606** |
 | derived levels: 1 / 2 / 3 | 582 / 112 / 0 | 623 / 127 / 3 | **4,424 / 179 / 3** |
 | leaf floor | 7,399 | 16,986 | **42,040** |
-| leaves with the 1.58x overhead | 13,974 | 26,838 | **~66,423** |
-| naming | $2.30 | $4.31 | **~$9.41** |
+| names (exact, balanced splitter) | — | **27,384** | **55,957** |
+| naming | $2.30 | **~$5.39** | **~$11.02** |
 
 The cost is still affordable and the depth claim still holds — 4,424 of 4,606 oversized
 categories need exactly one derived level. What changed is the proportion: **84% of the
 subdivision work is now regional**, and §9's third subsection below is the reason that is
 not simply more of the same work.
+
+**Re-measured 2026-11-08, and both inputs to the dollar figure were wrong.** The
+`1.58x overhead` row this table used to carry has been dropped, because it was an artefact of
+unbalanced clustering rather than a property of the problem: plain k-means produced 1.6–2.7x
+the leaf floor and trees up to **depth 8**, and the recursion amplified every uneven split
+into further levels. With size-balanced assignment the node count is **exact** — simulating
+the recursion predicts the real splitter to the node, verified on three live categories and
+held to it by a unit test. The per-name cost rose the other way, $0.000136 to **$0.000197**,
+because balanced leaves are full (22–25 series, against a former median of 16) so more of the
+18-title sample is sent. Fewer, fuller, costlier names; the totals fell.
 
 ### It applies upward too — and with regional data, FRED no longer nearly passes
 

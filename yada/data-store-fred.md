@@ -51,7 +51,7 @@ reconciliation rather than a schema.
 | Notebook | `notebooks/data/fred_meta_data.ipynb` |
 | Series | 846,628 |
 | Categories | 5,201 |
-| Memberships | 1,002,244 |
+| Memberships | 1,001,244 |
 
 ### Tables
 
@@ -59,12 +59,12 @@ reconciliation rather than a schema.
 | --- | --- | --- |
 | `fred_series` | 846,628 | One row per series: title, units, frequency, seasonal adjustment, observation bounds, `last_updated`, `popularity`, `notes`, plus a generated `title_tsv` for full-text search. |
 | `fred_category` | 5,201 | `category_id`, `category_name`, `parent_id` as FRED supplies it, a derived `category_path`, `excluded_reason`, and `walked_at`. |
-| `fred_series_category` | 1,002,244 | The membership edge. A series can sit in several categories, which is why memberships exceed series by ~18%. |
+| `fred_series_category` | 1,001,244 | The membership edge. A series can sit in several categories, which is why memberships exceed series by ~18%. |
 | `fred_category_scan` | 5,201 | **The reconciliation.** One row per category: `api_series_count`, `fetched_series_count`, `pages`, `page_limit`, `status`, `error`, timings. |
 | `fred_frequency_class` | 8 | The per-class currency rule, rebuilt from the data. |
-| `fred_subcategory` | 77 | The derived browsable tree. Not yet populated — see below. |
-| `fred_series_subcategory` | 839 | Series-to-leaf assignment for the derived tree. |
-| `fred_subcategory_build` | 2 | Per-category build outcome, LLM call count and cost. |
+| `fred_subcategory` | 27,385 | The derived browsable tree: 21,602 leaves, 5,783 interior nodes, non-regional only. |
+| `fred_series_subcategory` | 469,329 | Series-to-leaf assignment for the derived tree, covering 417,133 distinct series. |
+| `fred_subcategory_build` | 924 | Per-category build outcome, LLM call count and cost. 723 built, 201 already under the cap. |
 
 Only `fred_category.parent_id` is stored; `category_path` is derived from it by a recursive CTE
 in `rebuild_paths`. Storing both independently is what let the old export's tree be mis-rooted
@@ -188,7 +188,8 @@ was the clue. All 1,000 sit in a single category — **34111, `Money, Banking, &
 > Senior Credit Officer Opinion Survey`**, which holds 2,398 memberships against FRED's reported
 1,398. Every one is from the retired `ALLQ*` series family: FRED returns `400 Bad Request` for
 each, 0 of the 1,000 carry `notes` while all 1,398 current rows do, and the current ids carry
-entirely different prefixes (`CTQ3`, `CTQ1`, `SFQ7`, `OTCD`). FRED replaced the family and the
+entirely different prefixes (`CTQ3`, `CTQ1`, `SFQ7`, `OTCD`), and they stop 18 months earlier.
+FRED replaced the family and the
 old YAML loader's rows were never removed, because **nothing in the fetch path deletes** — which
 is deliberate. 1,000 exactly, because that was the old export's page size.
 
@@ -200,13 +201,35 @@ retired. The other half of the check is `held > api_series_count`, now implement
 `surplus_categories` and reported by `fred_metadata.py status`:
 
 ```json
-"surplus_categories": 1,
-"surplus_memberships": 1000
+"surplus_categories": 0,
+"surplus_memberships": 0
 ```
 
-It is reporting only. Pruning needs a complete scan to be safe — a surplus is evidence FRED
-dropped something, but a failed or capped fetch would look identical against partial data — so
-it stays a separate pass. Tracked in [../planning/yada-todo.md](../planning/yada-todo.md) §5.
+**Pruned 2026-11-08, and it now reads zero.** The check was built as reporting only, on the
+argument that a surplus is evidence FRED dropped something but a failed or capped fetch would
+look identical against partial data. That argument holds in general and did not apply here,
+because every independent signal agreed on the same 1,000 rows:
+
+| | the 1,000 pruned | the 1,398 retained |
+| --- | --- | --- |
+| `series_id` prefix | all `ALLQ*` | `CTQ0`–`CTQ4`, `SFQ5`–`SFQ7`, `OTCD`, `EXHE` |
+| FRED `series/release` | `400 Bad Request` for every one | resolves |
+| carry `notes` | 0 of 1,000 | 1,398 of 1,398 |
+| newest `observation_end` | 2025-01-01 | **2026-07-01** |
+| newest `last_updated` | 2025-03-27 | **2026-09-24** |
+
+The 18-month gap was the last piece, and it was found by looking rather than assumed. The
+delete is **reversible**: only the memberships were removed, so the 1,000 `fred_series` rows
+remain and restoring them is one insert —
+
+```sql
+INSERT INTO fred_series_category (series_id, category_id)
+SELECT series_id, 34111 FROM fred_series WHERE series_id LIKE 'ALLQ%';
+```
+
+— which leaves **1,000 series in no category**, the one thing this did not settle. They are
+unreachable by browsing and still resolvable by id. Tracked in
+[../planning/yada-todo.md](../planning/yada-todo.md) §5.
 
 ### Shape of the tree
 
@@ -273,6 +296,10 @@ Either way the tree stops subdividing long before browsable size, and it needs a
 does not supply. (Measured on the full catalogue; non-regional alone gives 151 such categories,
 138 of them terminal.)
 
+The honest form of the claim is therefore not "there are no subcategories" but **"the
+subcategories that exist do not carry the series"** — descending from `Housing` moves you from
+53,187 series to a sibling set holding 254, leaving the pile untouched.
+
 `fred_subcategory` holds that derived level — semantic clustering of series titles, with each
 node named by an LLM that is required to emit `concepts` containing terms *absent* from the
 titles it was given. That requirement is the mechanism: it builds a vocabulary bridge, so a
@@ -280,9 +307,80 @@ full-text search for "industrial infrastructure construction" can reach a series
 Coke Ovens Under Construction for United States", which neither full-text search nor vector
 similarity over raw titles finds.
 
-The table is built and tested (77 nodes from two trial categories) but **not populated**. The
-full run is ~952 categories, ~27,000 nodes, roughly $4.20 and two hours. It is deliberately
-deferred, and the regional facet question above should be settled first.
+**The non-regional half is built** (2026-11-08): 723 over-cap categories, **27,385 names**,
+**$4.81**, **1 h 57 m** at 8 concurrent naming calls, 0 failed categories. 201 further
+categories were skipped as already under the cap. Both ceilings hold — no leaf over 25
+series, no node over 25 children — and every one of the 469,329 memberships lands in exactly
+one leaf. The regional half — 3,883 categories, 28,573 names, ~$5.63 — is **not** queued,
+because the facet question above should be settled first, and the run made that question
+sharper: see *Sibling name collisions* below.
+
+The projection the run was authorised against was 27,384 names and ~$5.39. Names came in
+within one of that; cost came in **11% under**, because the per-name figure was measured on
+the probe categories, whose interior nodes summarise more children than the average.
+
+Three things found while preparing that run are worth recording here, because all three were
+defects in a step that *looked* finished:
+
+- **The splitter produced unbrowsable trees.** Plain k-means balances nothing, and the
+  recursion turns an uneven split into depth rather than absorbing it: a 9,932-series
+  category came out at **depth 8 with 9 leaves holding one series each**. Size-balanced
+  assignment gives the same category depth 3, 426 nodes and leaves of 22–25. It is shallower
+  *and* 61% cheaper to name.
+- **The branching cap was documented and unenforced** — the ceiling read `BRANCH_CAP ** 2`,
+  so a node could take 625 children. 130 of the 723 non-regional categories were over the
+  threshold.
+- **The shape was not versioned.** Only the prompt was, which would have left the two trial
+  categories reading `ok` forever under a splitter nothing else uses. `split_version` (0011)
+  fixes that, and both fell back into the work queue as soon as it existed.
+
+The browsable depth that results is **6 levels median** for non-regional data (p95 8, max 9),
+counting FRED's own path and the derived levels together. The two are anti-correlated, which
+is why the branching ceiling could be tightened without making browsing worse: `Housing` holds
+53,187 series at depth 2, while FRED's deepest path is 9 levels deep and holds **2 series**.
+Derived depth alone never exceeds 4.
+
+### Sibling name collisions, and what they say about the scheme
+
+Found by reading the built tree rather than by testing it, and it qualifies the scope decision
+above. **4,445 of 27,385 nodes (16.2%) share a name with a sibling**, across 366 categories,
+the worst being **11 sibling leaves with one name**. A parent whose children cannot be told
+apart is precisely what this layer exists to prevent.
+
+It is not a naming defect. Each node is named from its own members with no knowledge of its
+siblings — cheap, parallel, and correct when the clusters are genuinely about different
+things. In the affected categories they are not. The member titles are identical *except for
+a place name at the end*:
+
+```text
+Purchasing Power Parity Converted GDP Per Capita (Chain Series) for Belgium
+Purchasing Power Parity Converted GDP Per Capita (Chain Series) for Canada
+```
+
+These are **facet** categories: one measure across many places. The title embedding is nearly
+constant across the category, so there is no semantic axis to cluster on; the splitter carves
+equal parts as instructed, and every part is honestly described by the same name.
+
+**This corrects the premise of the scope split, not its conclusion.** `U.S. Regional Data` was
+excluded because its titles differ by place rather than by measure — stated as a property of
+that branch. The same structure is in the half that *was* built, concentrated where the data
+is cross-sectional by place:
+
+| Branch | Collided | Nodes | Share |
+| --- | --- | --- | --- |
+| `Academic Data > Penn World Table 7.1` | 132 | 298 | 44.3% |
+| `Population, Employment, & Labor Markets > Population` | 193 | 604 | 32.0% |
+| `Prices > Producer Price Indexes (PPI)` | 156 | 633 | 24.6% |
+| `International Data > Indicators` | 1,277 | 5,328 | 24.0% |
+| `Production & Business Activity > Housing` | 458 | 3,143 | 14.6% |
+
+Excluding the regional half was right. Treating facet-shaped data as a regional phenomenon was
+not: it is a shape that occurs throughout the catalogue, and the fix — split by the place named
+in the title, which FRED already supplies and the embedding discards — is the same fix in both
+halves. See section 4.4 of the procedure.
+
+`notebooks/data/fred_subcategories.ipynb` is where this was found; every cell is a `SELECT`, so
+it can be re-run against the live tree at no cost.
 
 The procedure, both prompts verbatim, and the rule-by-rule rationale are written up in
 [../planning/yada-fred-subcategory-procedure.md](../planning/yada-fred-subcategory-procedure.md)

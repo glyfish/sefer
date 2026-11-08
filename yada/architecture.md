@@ -300,6 +300,17 @@ one. This replaces a YAML-and-Chroma path that was wrong four ways without sympt
 [data-store-fred.md](data-store-fred.md). It is complete but **not yet wired to any agent**:
 FRED search still goes through ChromaDB.
 
+The three `fred_subcategory*` tables are the **derived** half, driven by
+`clients/bin/fred_subcategories.py`: FRED's taxonomy stops above browsable size (206 categories
+hold 500+ series directly, the largest 53,187), so the levels between a category and its series
+are clustered from title embeddings and named by an LLM. Two things carry the same argument as
+the reconciliation. Every row stores both `prompt_version` and `split_version`, because the
+names *and the shape* are derived and a tree half-built under two of either is not a tree. And
+both size invariants are asserted from the database rather than inferred -- at most 25 series
+per leaf and at most 25 children per node -- because the branch half was stated for a week
+without being enforced, and `verify` exits non-zero on a violation or on any node whose name
+records a naming failure.
+
 **Environments.** There is one database per environment -- `yada_dev` for `dev`, `yada` for
 `prod` -- selected by `YADA_ENV` (default `dev`, so nothing lands on production data by
 accident). `apps/core/environment.py` is the single resolver: the caches, `TradingDb`, and

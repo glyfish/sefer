@@ -7,7 +7,11 @@ document is the specification, not a description of yada's files — it records 
 step does, why it does it that way, and which decisions were measured rather than assumed.
 
 Reference implementation: `yada/apps/agentic/db/fred_discovery.py`,
-`yada/apps/agentic/db/fred_subcategory.py`, migrations `0006`–`0008`.
+`yada/apps/agentic/db/fred_subcategory.py`, migrations `0006`–`0011`, and the two entry
+points `yada/clients/bin/fred_metadata.py` (discovery) and
+`yada/clients/bin/fred_subcategories.py` (derivation). Both exist because of §0's first
+point: a documented step nobody can invoke is not reproducible, and `build()` had no caller
+for a week.
 
 ---
 
@@ -183,17 +187,45 @@ categories would otherwise be embedded repeatedly. Cost for the whole catalogue:
 **Not one k-means at `k = n/25`.** Measured: that leaves **37% of leaves over the cap,
 holding 56% of the titles**. A mean of 25 is not a maximum of 25.
 
-Recurse: cluster, then re-cluster any child still over the cap. Measured cost **1.58× the
-leaf floor**, giving leaves at a median of 16 and depth varying 1–5 rather than a fixed 2.
+Recurse: cluster, then re-cluster any child still over the cap.
 
-- Cap branching at 25 as well. A node with 243 children is no more evaluable than a leaf
-  with 1,000 series.
+**Balance the cluster sizes.** This is the step that decides how deep the tree gets, and
+getting it wrong is not visible until you look at the depth. Plain k-means optimises
+cohesion and says nothing about size; because the recursion continues until every leaf is
+under the cap, an uneven split is not absorbed, it is **amplified into depth**. Measured
+2026-11-08 on three live categories:
+
+| category | plain k-means | size-balanced |
+| --- | --- | --- |
+| 454 series | depth 6, 43 nodes, 31 leaves | **depth 2**, 20 nodes, 19 leaves |
+| 2,790 series | depth 6, 259 nodes | **depth 3**, 151 nodes |
+| 9,932 series | depth 8, 1,105 nodes, **9 leaves of one series** | **depth 3**, 426 nodes, none |
+
+A 454-series category reaching depth 6 is the failure the whole scheme exists to prevent:
+one cluster takes 63 of 454 and recurses five more times. Balanced, leaves come out at
+22–25 series rather than a median of 16 with singletons in the tail.
+
+Implementation: k-means for the centroids, then assignment capped at `ceil(n / k)` per
+cluster, placing points **most-confident-first** so the ones paying for the balance are the
+ones that were ambiguous anyway. It costs **2 points of leaf cohesion** (mean cosine to the
+leaf centroid 0.953 → 0.931) and **61% of the naming calls** on a large category.
+
+- **Enforce the branch cap, do not merely state it.** It was stated here and in the code
+  and neither enforced it: the `k` ceiling read `BRANCH_CAP ** 2`, so a node could take
+  **625** children — no more evaluable than the pile it was built to break up. 130 of the
+  723 non-regional categories were over the threshold that triggers it. Enforcing 25 does
+  not make the tree deeper to browse (section 2.4).
 - **Force a halving if a clustering pass makes no progress.** k-means can return every
   point in one cluster; without this the recursion never terminates. Arbitrary structure
   is worse than clustered structure but infinitely better than a hang.
-- Assert the invariant afterwards: `max(series_count) <= 25` over live leaves. The
-  requirement is a ceiling, so it is testable — and this project has repeatedly been bitten
-  by things that were true when built and quietly stopped being true.
+- Assert the invariants afterwards, **both directions**: `max(series_count) <= 25` over
+  live leaves, and `max(children) <= 25` over interior nodes. A tree can satisfy the first
+  completely and still be unbrowsable at the top, which is exactly how the branch cap went
+  unenforced — nothing looked upward.
+- **Version the splitter.** The names are not the only derived thing; the shape is too, and
+  a tree half-built under two splitters is no more comparable than one half-built under two
+  prompts. Store it on every row beside the prompt version, and treat a differing value as
+  pending work.
 
 ### 2.3 Name every node
 
@@ -215,6 +247,34 @@ cut off mid-string still yields a name that reads perfectly while its concepts a
 half-missing. Retry once with double the budget, then record a visible failure. Count
 truncations separately from parse failures: a rising truncation count means the budget is
 wrong, not the model.
+
+### 2.4 Depth comes from FRED's tree, not from the derived levels
+
+Worth measuring before optimising the wrong half. Total depth to reach a series is FRED's
+own path plus the derived levels, and the two are **anti-correlated** — the categories
+holding the most series sit shallowest upstream.
+
+| | FRED's own tree | with derived levels |
+| --- | --- | --- |
+| non-regional (1,028 categories) | median 3, max 9 | **median 4** |
+| regional (4,173) | **3,845 sit at exactly depth 5** | **median 6**, max 8 |
+
+`Production & Business Activity > Housing` holds 53,187 series at depth 2, so even three
+derived levels put it at 5. The deepest FRED paths hold almost nothing and need no derived
+levels at all — the record is depth 9 for **2 series**:
+
+```text
+International Data > Indicators > Work Started > Construction > Buildings
+  > Total Work Started > Construction > Buildings > Total
+```
+
+FRED has repeated `Construction > Buildings > Total` twice in one path, and the two levels
+above the leaf hold **0 series with exactly one child each**: three clicks offering no
+choice. Two cheap levers follow, neither needing a model call and neither a deletion:
+
+- **Collapse pass-through chains.** 71 categories hold no series and have exactly one
+  child (45 non-regional, 26 regional).
+- **Flag dead categories.** 74 hold no series and have no children.
 
 ---
 
@@ -351,66 +411,171 @@ derived rows is the only delete in the derivation — scoped to one category, ne
 
 ### 4.4 What is not solved
 
-- **Regional data is facet-shaped, and this scheme is not.** The semantic split clusters
-  series by title text. That works where titles differ by *what is measured*, and fails where
-  they differ by *where* — county titles are the same measure with a place name substituted,
-  so clustering groups Alabama's counties together instead of grouping unemployment measures
-  together. Regional data is 4,173 of 5,201 categories and 529,976 memberships, and it wants
+- **Facet-shaped data is not served by this scheme, and regional data is only the largest
+  instance.** The semantic split clusters series by title text. That works where titles differ
+  by *what is measured*, and fails where they differ by *where* — county titles are the same
+  measure with a place name substituted, so clustering groups Alabama's counties together
+  instead of grouping unemployment measures together. Regional data is 4,173 of 5,201
+  categories and 529,345 memberships, and it wants
   a facet scheme (measure x place x time) rather than a derived tree. BIS's SDMX dimensions
   are what that looks like when a provider supplies it natively. **Settle this before
   spending the regional half of the naming budget in §5** — a tree built on the wrong axis is
   not cheaper to discard than to skip.
+
+  The depth measurement in §2.4 makes this sharper than "the clustering groups on the wrong
+  axis". Regional categories already sit **5 levels deep** in FRED's own tree, 3,078 of them
+  as `States > <State> > Counties > <County>`. Deriving under that reaches a median of 6 and
+  a maximum of 8 clicks — to browse data whose natural shape is **two selections**, a place
+  and a measure. The scheme would be spending ~$5.63 and 28,573 names to build a deep tree
+  over a problem that a pair of dropdowns answers, and the place hierarchy FRED already
+  supplies is one of the two facets, sitting there unused as a hierarchy instead.
 - **Name stability.** A rebuild regenerates names, so a bookmarked subcategory can be
   renamed under its id. If names must be durable, pin them and rebuild only the structure.
-- **Pruning series FRED dropped.** Needs a complete scan to be safe; not implemented.
-- **Sibling-blind naming.** Each node is named without seeing its siblings, so near-
-  duplicate labels occur — one live category produced both *"Crop production and
-  agricultural statistics"* and *"Agricultural production and livestock statistics"*. Fixing
-  it means passing sibling names into the prompt, which has not been measured.
+- **Pruning series FRED dropped.** Needs a complete scan to be safe, and now has one
+  precedent rather than a general mechanism. Category 34111 held 2,398 memberships against
+  FRED's 1,398; the 1,000 extra were the retired `ALLQ*` family, pruned 2026-11-08 once
+  every check agreed — the surplus matched the `ALLQ%` prefix exactly, FRED returned 400 for
+  each, 0 of 1,000 carried `notes` against 100% of the 1,398 retained, the retained
+  prefixes were disjoint, and the retired rows stopped at `observation_end 2025-01-01`
+  against 2026-07-01. `surplus_categories` now returns **0** across 5,201 categories.
+  The 1,000 `fred_series` rows were kept, so the delete is reversible by one insert; they
+  are now series in no category, which is the next thing to decide.
+- **Sibling-blind naming, now measured.** Each node is named without seeing its siblings. The
+  completed run put a number on the consequence: **4,445 of 27,385 nodes (16.2%) share a name
+  with a sibling**, across 366 categories, worst case **11 sibling leaves under one name**.
+  Passing sibling names into the prompt would de-duplicate the labels, but §4.5 is why that
+  treats the symptom.
+
+### 4.5 The facet shape is in the half that was built
+
+Written after the non-regional run of 2026-11-08, because it revises §4.4's premise.
+
+The sibling collisions above are not distributed evenly. They concentrate exactly where the
+data is cross-sectional by place:
+
+| Branch | Collided | Nodes | Share |
+| --- | --- | --- | --- |
+| `Academic Data > Penn World Table 7.1` | 132 | 298 | 44.3% |
+| `Population, Employment, & Labor Markets > Population` | 193 | 604 | 32.0% |
+| `Prices > Producer Price Indexes (PPI)` | 156 | 633 | 24.6% |
+| `International Data > Indicators` | 1,277 | 5,328 | 24.0% |
+| `Production & Business Activity > Housing` | 458 | 3,143 | 14.6% |
+| `International Data > Countries` | 418 | 5,440 | 7.7% |
+
+Read the member titles of any one of them and the cause is unambiguous — they are identical
+except for a place name, which sits at the *end* of a long string:
+
+```text
+Purchasing Power Parity Converted GDP Per Capita (Chain Series) for Belgium
+Purchasing Power Parity Converted GDP Per Capita (Chain Series) for Canada
+```
+
+The embedding of such a title is nearly constant across the category, so there is no semantic
+axis to cluster on. The splitter carves equal parts because that is what it is told to do, and
+every part is then honestly described by the same name. The name is simply the first place the
+absence of a semantic axis becomes visible.
+
+**What this changes.** §4.4 excluded the regional half on the grounds that regional titles
+differ by place rather than by measure, and framed that as a property of the regional branch.
+The exclusion was right and the framing was wrong: the shape recurs throughout the catalogue,
+and roughly a sixth of the tree that was just paid for is affected by it. Three consequences:
+
+1. **The remedy is one remedy, not two.** Split facet categories by the place named in the
+   title — data FRED already supplies and the embedding discards — rather than semantically.
+   That serves `International Data > Indicators` and `U.S. Regional Data` alike.
+2. **De-duplicating names does not fix it.** Passing siblings into the prompt would make 11
+   identical labels into 11 distinguishable ones, all describing arbitrary thirds of one
+   undifferentiated pile. The split is what is wrong; the label only reports it.
+3. **Detection should precede the regional spend.** A category whose titles share a long
+   common prefix is detectable *before* any model call — cheaply, from the titles alone. That
+   test is what §5 should gate the regional half on, rather than the regional/non-regional
+   path prefix, which is now known to be the wrong discriminator.
+
+Found by `yada/notebooks/data/fred_subcategories.ipynb`, which is read-only and re-runnable
+against the live tree.
 
 ---
 
 ## 5. Cost and scale, measured
 
-Re-measured 2026-11-07, after the regional subtree was collected. The catalogue doubled,
-and the derivation work grew with it.
+Re-measured **2026-11-08**, after the regional subtree was collected and after the splitter
+was balanced (section 2.2). Both numbers moved, in opposite directions.
 
 | | |
 | --- | --- |
 | categories, total / with series / excluded | 5,201 / 4,919 / 0 |
 | series | 846,628 |
-| memberships | 1,002,244 |
+| memberships | 1,001,244 |
 | distinct titles | 659,829 (77.9%) |
 | largest category | 53,187 series → 3 derived levels |
 | discovery | 10,701 requests, 73 min across two runs |
 | embedding the whole catalogue | ~$0.20 |
-| naming, measured per name | **$0.000136** |
+| naming, measured per name | **$0.000197** |
+| naming throughput, 8 concurrent | **4.38 names/s** |
 
-**Split by scheme, because only half of it is designed.** The semantic scheme in §2 was
-measured on non-regional data; regional data is facet-shaped and §4.4 is why that is not the
-same problem. Quoting one total hides that.
+**Why the per-name cost rose from $0.000136 to $0.000197.** It is a consequence of the
+balance fix, not a regression. Balanced leaves are *full* — 22–25 series against a former
+median of 16 — so more of the 18-title sample is actually sent, and the model spends more
+output tokens on it. The totals still fell, because the node count fell faster: the
+454-series probe went from 43 names at $0.00586 to **20 names at $0.00494**.
 
-| | non-regional | regional | whole |
+**Fewer, fuller, costlier names.** Quoting $/name alone hides that, which is why the table
+below is built from node counts rather than scaled from a dollar figure.
+
+**Split by scheme, because only half of it is designed.** The semantic scheme in section 2
+was measured on non-regional data; regional data is facet-shaped and section 4.4 is why that
+is not the same problem.
+
+| | non-regional (measured) | regional (projected) | whole |
 | --- | --- | --- | --- |
-| categories needing subdivision | 723 | 3,883 | 4,606 |
-| memberships covered | 470,329 | 529,345 | 999,674 |
-| leaf floor at 25 | 19,171 | 22,869 | 42,040 |
-| leaves with the 1.58× overhead | ~30,290 | ~36,133 | ~66,423 |
-| interior nodes | ~1,264 | ~1,508 | ~2,770 |
-| names to generate | ~31,554 | ~37,641 | ~69,193 |
-| naming cost | **~$4.29** | ~$5.12 | ~$9.41 |
+| categories with series | 924 | 3,995 | 4,919 |
+| categories over the cap | 723 | 3,883 | 4,606 |
+| memberships covered | 469,329 | 529,345 | 998,674 |
+| names projected | 27,384 | 28,573 | 55,957 |
+| names generated | **27,385** | — | — |
+| naming cost projected | ~$5.39 | ~$5.63 | ~$11.02 |
+| naming cost actual | **$4.81** | — | — |
+| wall-clock at 8 concurrent | **1 h 57 m** | ~1.8 h | ~3.5 h |
+| sequential, for comparison | 10.4 h | 10.9 h | 21.3 h |
 
-The non-regional figure is worth noting: it is **$4.29 against the $4.20 estimated from the
-424,634-series catalogue**, so the per-name cost model held as the catalogue doubled. The
-growth is volume, not a change in the economics.
+The non-regional column is now the run of 2026-11-08, not a projection: 720 categories built
+in that run plus 3 already built from probes, 0 failed, 201 skipped as already under the cap,
+26,922 model calls. The regional column is still a projection and still blocked on §4.4.
 
-Measured on two live categories: 454 series → 43 nodes / 31 leaves, max leaf 25, mean 14.6,
-0 failures, $0.0059.
+**The node count is accurate in aggregate, and that is the claim worth making.** Because
+balanced clustering divides each node evenly, simulating the recursion tracks the real
+splitter: 20 / 151 / 426 nodes modelled for the 454 / 2,790 / 9,932-series categories, and
+20 / 151 / 426 produced. Under plain k-means no such claim was possible — the same three
+categories came out at 43 / 259 / 1,105 against a floor of 20 / 112 / 398.
 
-**What is actually committed to:** the non-regional half, ~$4.29, is the run the measurements
-support. The regional half should wait on §4.4.
+Measured against the completed run across all 723 built categories: **predicted 27,384
+against 27,385 actual**, exact for **93.4%** of categories individually. But it is not a
+per-category guarantee — 8 categories were under-predicted and the worst is a third low
+(637 series, 50 modelled against 74 produced), because `k` is itself capped at the branching
+ceiling, so above 625 series the recursion takes a turn simple division does not. Authorise a
+run from the total; treat any one category's figure as indicative. A unit test holds the model
+and the splitter to each other at six sizes, so a plan cannot quote a total the run will not
+reproduce.
 
----
+**Correcting the previous estimate.** This section said **~$4.29** for the non-regional half
+and called it a validation of the model, "$4.29 against the $4.20 estimated from the
+424,634-series catalogue". That agreement was a coincidence of two compensating errors: the
+node count was low (it counted the leaf floor, which under-reports by a third, and it
+assumed the unenforced `BRANCH_CAP ** 2` ceiling) and the per-name cost was low. The honest
+figure for the committed half is **~$5.39**.
+
+Wall-clock, not cost, was the real constraint and the previous estimate did not mention it:
+naming was sequential at 1.37 s a call, which is **10.4 hours** of waiting on HTTP for the
+non-regional half alone. Siblings are independent, so a level can be named at once.
+
+**What was actually run:** the non-regional half, **$4.81 and 1 h 57 m**, completed
+2026-11-08. Cost came in 11% under projection because the per-name figure had been measured on
+probe categories, whose interior nodes summarise more children than the average; wall-clock
+came in 15% over, because the two largest categories (`Housing` at 53,187 series and
+`Flow of Funds` at 46,124) are a serial tail no concurrency within a level can remove.
+
+The regional half still waits on section 4.4 — and the completed run strengthens that, because
+the facet shape it describes turned out to be present in the non-regional half too. See §4.5.
 
 ## 6. Ordering, and what blocks what
 
@@ -420,6 +585,12 @@ support. The regional half should wait on §4.4.
    none.
 2. **Derivation before search tooling.** The searchable surface is the names and concepts.
 3. **Resync after both**, since it needs centroids to exist.
+4. **Measure the shape before paying to name it.** Out of order, this is the expensive
+   mistake: naming is the only step that costs money, and it is the last one, so a defect
+   in embedding or splitting is paid for in names. Both of the splitter defects in §2.2
+   were found by reading a built tree's depth and node count against the model — $0.09 of
+   probe runs against the $5.39 they would otherwise have been baked into. Build three real
+   categories, read their depth, leaf sizes and branching, *then* commit to the scope.
 
 ## 7. Open, for meida
 
@@ -430,6 +601,11 @@ support. The regional half should wait on §4.4.
   from a clustering run and an LLM call. Same column, very different provenance and failure
   modes — a hallucinated concept is a silent misroute. A `concept_source` discriminator, or
   separate columns, rather than mixing them.
+- **Whether the regional facet scheme belongs here at all.** §4.4 argues the semantic
+  tree is the wrong shape for 4,173 of 5,201 categories. If meida builds facets, the place
+  hierarchy FRED already supplies is one axis for free and the derived tree is needed only
+  for the measure axis — which would make the regional half cheaper than the non-regional
+  one rather than slightly dearer.
 - **One live inconsistency.** `International Data > Countries > United States` holds 2,790
   series with no `page_limit`, because it was fetched in full while testing pagination
   before the cap existed. The other 244 countries are capped at 1,000. The record is

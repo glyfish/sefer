@@ -695,3 +695,63 @@ add the check.
 **Also open: a general prune.** One verified category is a precedent, not a mechanism. A
 `resync` that notices FRED has retired a family should be able to act on it without a person
 assembling five signals by hand.
+
+---
+
+## 6. Remove the legacy stack — after the migration, not before
+
+**Recorded 2026-11-08, deliberately as a deferral.** The MCP migration replaces whole
+subsystems rather than editing them, so the repository will carry two implementations of
+several things until the cutover completes. That is the intended state, and the risk it
+creates is the opposite of the usual one: not that dead code lingers unnoticed, but that
+something gets deleted while it is still the only thing serving traffic.
+
+**Nothing in this section is actionable yet.** The list below is candidates, not a work
+queue, and the reason it cannot be a work queue is that *what is removable is not yet
+known* — several entries depend on decisions that have not been made (see the question
+marks). Removal happens in one pass once the migration is finished and the client-side
+agent is the only path, and each entry needs its replacement demonstrably live first.
+
+The live path today is still LangGraph: `api/main.py:137` constructs `OrchestratorAgent`
+for every request. Until that is false, none of this is legacy in practice.
+
+### Candidates, with what has to be true before each one goes
+
+| Candidate | Replaced by | Blocked on |
+| --- | --- | --- |
+| `OrchestratorAgent` and its hand-built `StateGraph` — `route_model`, `passthrough`, the `human_input` edge (`orchestrator.py:354`) | the client-side agent in Goose | the whole migration; §5.6 |
+| `HumanInputNode` (`core/agents/human_input_node.py`) | MCP elicitation, `ctx.elicit()` | the `json_response` transport tradeoff — see `yada-document-mcp-design.md`, "Elicitation versus `json_response`" |
+| SSE `interrupt` event (`api/main.py:242`) and `/api/request/resume` (`api/main.py:301`) | the MCP client's own form rendering | same as above |
+| `api/main.py`'s custom web UI path, the `<img>` payloads | MCP Apps | §5.4 |
+| `SearchAgent` | Goose's `web-search` platform extension | §5.1 says retired, not ported — closest to ready |
+| The four routers: `DocumentAgent`, `TimeSeriesAgent`, `PlotAgent`, `TimeSeriesReportAgent` | **undecided** — collapse into client routing, or survive as agent-backed MCP tools | §5.6 leaves this open |
+| `clients/bin/fred.py` and the Chroma `fred` collection | the Postgres catalogue plus the derived subcategory tree | §5; still wired to three agents |
+| `fred_catalogue.py`'s YAML readers — `source_files`, `iter_source`, `read_source`, `build` | nothing; already callerless | **ready now**, and the cheapest one |
+| `notebooks/data/human_in_the_loop.ipynb` steps 2–5 | whatever tests the elicitation round-trip | the forms phase. Step 1 does **not** go — see below |
+
+### What survives that looks like it should not
+
+- **`forms.py` is not legacy.** `LoadResearchDocumentForm`, `LoadGitHubRepoForm`,
+  `validate_form` and `FORM_REGISTRY` describe *which fields a load needs*, which is a
+  property of the data, not of the graph. Under MCP those schemas become the elicitation
+  schema — `document-search-tasks.md` already specifies how its field titles must read.
+  The only current caller is `HumanInputNode`, so a naive dead-code sweep after that node
+  goes would take `forms.py` with it. It should not.
+- **`human_in_the_loop.ipynb` step 1** is the executable description of those schemas, and
+  is the one part of that notebook with a life after the orchestrator.
+
+### Why a single pass, and not opportunistically
+
+Removing each piece as its replacement lands means the repository spends the migration in a
+state where neither implementation is wholly present, and a rollback has nothing to roll
+back to. `mcp-migration` must not merge to main until the migration completes; the same
+argument says the deletions wait for the same moment, as one reviewable commit per
+subsystem rather than scattered through the feature work.
+
+Two things to do when that moment arrives, neither of which is a deletion:
+
+1. **Grep for callers rather than trusting this table.** It was assembled by reading, and
+   the `forms.py` case shows how an entry can be wrong in the direction that loses work.
+2. **Check `.gitignore`d strays too.** `notebooks/data/.db/fred` is a 224K Chroma store
+   left by a notebook run from the wrong working directory — invisible to `git status`, so
+   it will survive any amount of source-level tidying.

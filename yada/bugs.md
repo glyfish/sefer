@@ -69,7 +69,7 @@ explicitly and link here. The counts were re-measured independently against
 
 The code defect below is **not** fixed — only the documentation of it. What the correction
 changes in practice: the Chroma store covers 123,119 series against the Postgres catalogue's
-846,628, so the gap between the two FRED stores is **6.9x, not the 5.8x** a naive row-count
+854,318, so the gap between the two FRED stores is **6.9x, not the 5.8x** a naive row-count
 comparison gives.
 
 **To reproduce.** Open `.db/fred/chroma.sqlite3`, join `embedding_metadata` on `id`

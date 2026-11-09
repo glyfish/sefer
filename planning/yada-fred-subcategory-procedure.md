@@ -95,33 +95,39 @@ for a periodic refresh, so the walk takes it as an argument. Defaulting to skip 
 later run a silent no-op; defaulting to revisit makes resume pointless. Neither is safe
 implicitly.
 
-### 1.2 Stop at excluded subtrees, and record why
+### 1.2 Nothing is excluded, and there is no way to exclude it
 
-An excluded category is **recorded and not descended into** — one request instead of
-several thousand. Store the reason on the row.
+**Superseded 2026-11-08.** This section described a mechanism that no longer exists:
+`fred_category.excluded_reason` recorded a branch as deliberately skipped so a reader could
+tell an omission from a failed fetch. Migration `0012` dropped the column, along with
+`fred_category_scan.page_limit`. The catalogue is now fetched whole, and §1.3's
+reconciliation is the only thing that decides whether a category is finished.
 
-| excluded | size | reason |
-| --- | --- | --- |
-| `U.S. Regional Data` (3008) | 4,173 categories | states, counties, metros; `States` alone is 53 categories / ~80,000 series |
+It is kept because the argument for it was good and the argument against it is the more
+useful one to record. The mechanism existed so that a deliberate omission was
+distinguishable from a failure, which is a real distinction and worth having. What it cost
+was a *configurable way for data to be absent on purpose*, discoverable only by whoever
+later debugged the gap and traced it back to a flag nobody had set. One exclusion was ever
+recorded — `U.S. Regional Data` (3008), 4,173 categories — and it was lifted on 2026-11-07
+by collecting the branch, 8,342 requests in 45 minutes.
 
-Keep the categories that an earlier unscoped walk already discovered. They cost nothing,
-they record that the branch exists, and keeping them means including regional data later
-is a *fetch*, not another hour of walking. **Do not mark a descendant that already holds
-series** — `Census`, `BEA` and `BLS Regions` came through the original export with data,
-and calling them excluded would contradict the rows beneath them.
+Two details from it are still load-bearing elsewhere:
 
-**This exclusion has since been lifted** — regional data was collected on 2026-11-07 and the
-exclusion table is now empty — which is the point of recording it as data rather than
-hard-coding a skip. The row above is kept as the worked example.
-
-**Reconcile exclusions in both directions.** Emptying the table has to *clear* the stored
-marks, not merely stop adding them. A one-way reconciler leaves a branch that is wanted
-again flagged as excluded, the pending-work query keeps skipping it, and the fetch reports
-success over data it never requested — the truncated-export failure in a new place.
+- **A walk is cheap and a fetch is not, so discovered categories are kept even when their
+  series are not wanted.** That is why lifting the exclusion was a fetch rather than another
+  hour of walking, and why `walk --revisit` exists separately from `fetch`.
+- **Any "deliberately absent" marker has to be reconciled in both directions.** Clearing the
+  policy has to clear the stored marks, not merely stop adding them. A one-way reconciler
+  leaves a branch that is wanted again still flagged, the pending-work query keeps skipping
+  it, and the fetch reports success over data it never requested — the truncated-export
+  failure in a new place. The same trap caught `fred_subcategory_build`, which keyed
+  pending work on status and versions but not on membership, so a category that *gained*
+  series read `ok` forever (fixed 2026-11-08; see §4.3).
 
 ### 1.3 Fetch series, paginated, reconciled
 
-For each non-excluded category, page `category/series` with `limit=1000`.
+For each category — there is no longer any such thing as an excluded one — page
+`category/series` with `limit=1000`.
 
 - **Advance `offset` by the page actually returned**, not by the requested limit. Advancing
   by the limit skips a window whenever the server returns a short page.
@@ -411,24 +417,25 @@ derived rows is the only delete in the derivation — scoped to one category, ne
 
 ### 4.4 What is not solved
 
-- **Facet-shaped data is not served by this scheme, and regional data is only the largest
-  instance.** The semantic split clusters series by title text. That works where titles differ
-  by *what is measured*, and fails where they differ by *where* — county titles are the same
-  measure with a place name substituted, so clustering groups Alabama's counties together
-  instead of grouping unemployment measures together. Regional data is 4,173 of 5,201
-  categories and 529,345 memberships, and it wants
-  a facet scheme (measure x place x time) rather than a derived tree. BIS's SDMX dimensions
-  are what that looks like when a provider supplies it natively. **Settle this before
-  spending the regional half of the naming budget in §5** — a tree built on the wrong axis is
-  not cheaper to discard than to skip.
+- **Facet-shaped data is not served by this scheme, and it is not where this section
+  predicted.** The semantic split clusters series by title text. That works where titles
+  differ by *what is measured*, and fails where they differ by *where* — county titles are
+  the same measure with a place name substituted, so clustering groups Alabama's counties
+  together instead of grouping unemployment measures together. The reasoning is sound. The
+  branch it was aimed at was wrong: regional data was named here as "the largest instance",
+  and now that both halves are built it is the **least** affected branch measured (§4.5).
+  The remedy is unchanged — a facet scheme (measure x place x time) rather than a derived
+  tree, which is what BIS's SDMX dimensions look like when a provider supplies it natively
+  — but it has to be aimed at *categories*, not at a path prefix.
 
-  The depth measurement in §2.4 makes this sharper than "the clustering groups on the wrong
-  axis". Regional categories already sit **5 levels deep** in FRED's own tree, 3,078 of them
-  as `States > <State> > Counties > <County>`. Deriving under that reaches a median of 6 and
-  a maximum of 8 clicks — to browse data whose natural shape is **two selections**, a place
-  and a measure. The scheme would be spending ~$5.63 and 28,573 names to build a deep tree
-  over a problem that a pair of dropdowns answers, and the place hierarchy FRED already
-  supplies is one of the two facets, sitting there unused as a hierarchy instead.
+  The depth and cost prediction can be closed out, because it was the accurate half of the
+  argument. Regional categories do sit **5 levels deep** in FRED's own tree, 3,078 of them
+  as `States > <State> > Counties > <County>`, and this section projected ~$5.63 and 28,573
+  names to derive under them. Measured on the run of 2026-11-09: **$5.99 and 28,566 nodes**,
+  with the two stacked trees reaching a median of **7** clicks and a maximum of **9**. So the
+  scale was forecast well and the conclusion still does not follow from it — the objection
+  was never really the depth, it was the axis, and the axis fails worse in the half that was
+  built first.
 - **Name stability.** A rebuild regenerates names, so a bookmarked subcategory can be
   renamed under its id. If names must be durable, pin them and rebuild only the structure.
 - **Pruning series FRED dropped.** Needs a complete scan to be safe, and now has one
@@ -440,27 +447,44 @@ derived rows is the only delete in the derivation — scoped to one category, ne
   against 2026-07-01. `surplus_categories` now returns **0** across 5,201 categories.
   The 1,000 `fred_series` rows were kept, so the delete is reversible by one insert; they
   are now series in no category, which is the next thing to decide.
-- **Sibling-blind naming, now measured.** Each node is named without seeing its siblings. The
-  completed run put a number on the consequence: **4,445 of 27,385 nodes (16.2%) share a name
-  with a sibling**, across 366 categories, worst case **11 sibling leaves under one name**.
-  Passing sibling names into the prompt would de-duplicate the labels, but §4.5 is why that
-  treats the symptom.
+- **Sibling-blind naming, now measured.** Each node is named without seeing its siblings.
+  Across the finished catalogue: **6,526 of 58,227 nodes (11.2%) share a name with a
+  sibling**, in 860 of 4,606 built categories, worst case **11 sibling leaves under one
+  name**. Passing sibling names into the prompt would de-duplicate the labels, but §4.5 is
+  why that treats the symptom.
 
-### 4.5 The facet shape is in the half that was built
+### 4.5 The facet shape belongs to categories, not to a branch
 
-Written after the non-regional run of 2026-11-08, because it revises §4.4's premise.
+Written after the non-regional run of 2026-11-08 and revised after the regional run of
+2026-11-09, because between them they refute §4.4's premise rather than merely sharpening it.
 
-The sibling collisions above are not distributed evenly. They concentrate exactly where the
-data is cross-sectional by place:
+The sibling collisions above are not distributed evenly. They concentrate where the data is
+cross-sectional by place — and the branch excluded for being exactly that sits at the bottom
+of the table:
 
 | Branch | Collided | Nodes | Share |
 | --- | --- | --- | --- |
-| `Academic Data > Penn World Table 7.1` | 132 | 298 | 44.3% |
-| `Population, Employment, & Labor Markets > Population` | 193 | 604 | 32.0% |
+| `Academic Data > Penn World Table 7.1` | 134 | 298 | 45.0% |
+| `Population, Employment, & Labor Markets > Population` | 200 | 604 | 33.1% |
 | `Prices > Producer Price Indexes (PPI)` | 156 | 633 | 24.6% |
-| `International Data > Indicators` | 1,277 | 5,328 | 24.0% |
-| `Production & Business Activity > Housing` | 458 | 3,143 | 14.6% |
-| `International Data > Countries` | 418 | 5,440 | 7.7% |
+| `International Data > Indicators` | 1,294 | 5,328 | 24.3% |
+| `Production & Business Activity > Housing` | 522 | 3,143 | 16.6% |
+| `International Data > Countries` | 733 | 7,716 | 9.5% |
+| **`U.S. Regional Data`** | **1,794** | **28,566** | **6.3%** |
+
+Nor is that an artefact of regional categories being smaller, which they are — a mean of
+136 series against 720, a median of 88 against 205. Held at equal size the ordering does not
+change:
+
+| Category size | non-regional | regional |
+| --- | --- | --- |
+| 26–99 series | 9.4% | **2.6%** |
+| 100–499 | 18.4% | **6.4%** |
+| 500–1,999 | 18.1% | **13.0%** |
+| 2,000+ | 15.1% | 16.8% |
+
+Only the last row reverses, on five regional categories against sixty-six, which is too few
+to carry a claim.
 
 Read the member titles of any one of them and the cause is unambiguous — they are identical
 except for a place name, which sits at the *end* of a long string:
@@ -476,9 +500,10 @@ every part is then honestly described by the same name. The name is simply the f
 absence of a semantic axis becomes visible.
 
 **What this changes.** §4.4 excluded the regional half on the grounds that regional titles
-differ by place rather than by measure, and framed that as a property of the regional branch.
-The exclusion was right and the framing was wrong: the shape recurs throughout the catalogue,
-and roughly a sixth of the tree that was just paid for is affected by it. Three consequences:
+differ by place rather than by measure, and treated that as a property of the regional branch.
+Neither half of that survived measurement. The shape recurs throughout the catalogue, a sixth
+of the non-regional tree is affected by it, and the excluded branch is affected least of all.
+Four consequences:
 
 1. **The remedy is one remedy, not two.** Split facet categories by the place named in the
    title — data FRED already supplies and the embedding discards — rather than semantically.
@@ -486,10 +511,17 @@ and roughly a sixth of the tree that was just paid for is affected by it. Three 
 2. **De-duplicating names does not fix it.** Passing siblings into the prompt would make 11
    identical labels into 11 distinguishable ones, all describing arbitrary thirds of one
    undifferentiated pile. The split is what is wrong; the label only reports it.
-3. **Detection should precede the regional spend.** A category whose titles share a long
-   common prefix is detectable *before* any model call — cheaply, from the titles alone. That
-   test is what §5 should gate the regional half on, rather than the regional/non-regional
-   path prefix, which is now known to be the wrong discriminator.
+3. **Detection replaces the path prefix, and is no longer a gate on spending.** A category
+   whose titles share a long common prefix is detectable *before* any model call — cheaply,
+   from the titles alone. That test is what should mark a category as facet-shaped. It was
+   going to gate the regional spend; the spend has happened, so it now has a different job:
+   deciding which of the 860 collided categories a facet pass should rebuild, in either half.
+4. **`SCOPES` is a way to split a long run, and nothing more.** It was carrying a quality
+   judgement, and `--scope` defaulted to `non-regional` on the strength of it, which silently
+   withheld 80% of the catalogue from anyone who did not pass the flag. Both defaults this
+   ever had were wrong in opposite directions — the earlier one would spend the whole budget
+   by accident — so as of 2026-11-09 there is none: `build` and `resync` require `--scope`,
+   and the library's `scope` parameter is keyword-only with no default.
 
 Found by `yada/notebooks/data/fred/fred_subcategories.ipynb`, which is read-only and re-runnable
 against the live tree.
@@ -498,17 +530,17 @@ against the live tree.
 
 ## 5. Cost and scale, measured
 
-Re-measured **2026-11-08**, after the regional subtree was collected and after the splitter
-was balanced (section 2.2). Both numbers moved, in opposite directions.
+Re-measured **2026-11-09**, with the whole catalogue collected and the whole tree built.
+Nothing here is a projection any more.
 
 | | |
 | --- | --- |
-| categories, total / with series / excluded | 5,201 / 4,919 / 0 |
-| series | 846,628 |
-| memberships | 1,001,244 |
-| distinct titles | 659,829 (77.9%) |
-| largest category | 53,187 series → 3 derived levels |
-| discovery | 10,701 requests, 73 min across two runs |
+| categories, total / with series | 5,201 / 4,919 |
+| series | 854,318 |
+| memberships | 1,052,462 |
+| distinct titles | 662,658 (77.6%) |
+| largest category | 53,187 series → 4 derived levels, 3,127 nodes |
+| discovery | 10,701 requests / 73 min on 2026-11-07, plus 108 on 2026-11-08 to refetch the 38 categories `page_limit` had truncated |
 | embedding the whole catalogue | ~$0.20 |
 | naming, measured per name | **$0.000197** |
 | naming throughput, 8 concurrent | **4.38 names/s** |
@@ -522,25 +554,44 @@ output tokens on it. The totals still fell, because the node count fell faster: 
 **Fewer, fuller, costlier names.** Quoting $/name alone hides that, which is why the table
 below is built from node counts rather than scaled from a dollar figure.
 
-**Split by scheme, because only half of it is designed.** The semantic scheme in section 2
-was measured on non-regional data; regional data is facet-shaped and section 4.4 is why that
-is not the same problem.
+**Split by half, because the two were run separately.** Not because the scheme fits one and
+not the other — §4.5 is why that framing is retired.
 
-| | non-regional (measured) | regional (projected) | whole |
+| | non-regional | regional | whole |
 | --- | --- | --- | --- |
 | categories with series | 924 | 3,995 | 4,919 |
-| categories over the cap | 723 | 3,883 | 4,606 |
-| memberships covered | 469,329 | 529,345 | 998,674 |
+| categories built (over the cap) | 723 | 3,883 | 4,606 |
+| categories skipped (under the cap) | 201 | 112 | 313 |
+| memberships covered | 522,486 | 529,976 | 1,052,462 |
 | names projected | 27,384 | 28,573 | 55,957 |
-| names generated | **27,385** | — | — |
+| names generated | **29,661** | **28,566** | **58,227** |
 | naming cost projected | ~$5.39 | ~$5.63 | ~$11.02 |
-| naming cost actual | **$4.81** | — | — |
-| wall-clock at 8 concurrent | **1 h 57 m** | ~1.8 h | ~3.5 h |
-| sequential, for comparison | 10.4 h | 10.9 h | 21.3 h |
+| naming cost actual | **$5.86** | **$5.99** | **$11.85** |
+| wall-clock projected | — | ~1.8 h | — |
+| wall-clock actual, 8 concurrent | **2 h 17 m** | **7 h 31 m** | **9 h 48 m** |
+| throughput | 216 names/min | 63 names/min | — |
 
-The non-regional column is now the run of 2026-11-08, not a projection: 720 categories built
-in that run plus 3 already built from probes, 0 failed, 201 skipped as already under the cap,
-26,922 model calls. The regional column is still a projection and still blocked on §4.4.
+Non-regional is the run of 2026-11-08 (720 categories, plus 3 from probes, $4.81, 1 h 57 m)
+*plus* the rebuild of 2026-11-08 that followed lifting `page_limit` — 38 country categories
+that had gained series, 2,462 more names, $1.05, 20 m. Regional is the run of 2026-11-09,
+restarted once after 121 categories to fix the naming retry (§2.3), so its figure includes
+$0.004 paid twice.
+
+**The cost model was right and the time model was wrong by 4x.** Node counts came in within
+0.01% of the simulation in aggregate, and dollars followed them: $11.85 against $11.02
+projected, the 7% gap being the per-name cost rising on fuller leaves. Wall-clock was
+projected by scaling the non-regional run's names-per-minute, and that rate is not a
+property of the pipeline — it is a property of the *shape* of what is being named.
+Concurrency is 8 calls in flight **within one level of one tree**, so a tree wide enough to
+fill 8 workers sustains 216 names/min while a tree averaging 7.4 nodes in total cannot keep
+them busy, and regional averages 136 series per category against non-regional's 720. Scale
+a future estimate from names/min measured on categories of comparable *size*, or model the
+concurrency directly; do not scale it from a different half of the catalogue.
+
+**`sum(cost_usd)` reads $11.45, not $11.85.** A rebuild replaces a category's build row, so
+the 38 countries' original cost went with it. The $11.85 is from the run summaries, which is
+the figure to trust for what was actually spent; the column is the cost of the tree as it
+now stands.
 
 **The node count is accurate in aggregate, and that is the claim worth making.** Because
 balanced clustering divides each node evenly, simulating the recursion tracks the real
@@ -548,14 +599,18 @@ splitter: 20 / 151 / 426 nodes modelled for the 454 / 2,790 / 9,932-series categ
 20 / 151 / 426 produced. Under plain k-means no such claim was possible — the same three
 categories came out at 43 / 259 / 1,105 against a floor of 20 / 112 / 398.
 
-Measured against the completed run across all 723 built categories: **predicted 27,384
-against 27,385 actual**, exact for **93.4%** of categories individually. But it is not a
-per-category guarantee — 8 categories were under-predicted and the worst is a third low
-(637 series, 50 modelled against 74 produced), because `k` is itself capped at the branching
-ceiling, so above 625 series the recursion takes a turn simple division does not. Authorise a
-run from the total; treat any one category's figure as indicative. A unit test holds the model
-and the splitter to each other at six sizes, so a plan cannot quote a total the run will not
-reproduce.
+Measured against the completed build across all 4,606 categories: **predicted 58,222
+against 58,227 actual (-0.01%)**, exact for **98.1%** of categories individually. But it is
+not a per-category guarantee — 12 categories were under-predicted and the worst is a third
+low (637 series, 50 modelled against 74 produced), because `k` is itself capped at the
+branching ceiling, so above 625 series the recursion takes a turn simple division does not.
+Authorise a run from the total; treat any one category's figure as indicative. A unit test
+holds the model and the splitter to each other at six sizes, so a plan cannot quote a total
+the run will not reproduce.
+
+Read the 98.1% with the mix in mind, because it flatters the model: small categories are
+predicted exactly and most regional ones are small, so regional scores 99.6% against
+non-regional's 90.2%. The aggregate improved because the population got easier.
 
 **Correcting the previous estimate.** This section said **~$4.29** for the non-regional half
 and called it a validation of the model, "$4.29 against the $4.20 estimated from the

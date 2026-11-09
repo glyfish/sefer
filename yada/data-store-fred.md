@@ -6,7 +6,7 @@ data store: observations are fetched separately and land in the PostgreSQL time-
 
 **There are currently two of them, and both are live.** A PostgreSQL catalogue, collected
 directly from the FRED API, is complete and is the one to build on. A ChromaDB collection,
-indexed from a superseded YAML export, covers 123,119 series against Postgres's 846,628 and is
+indexed from a superseded YAML export, covers 123,119 series against Postgres's 854,318 and is
 partly wrong, but is still the only store any agent actually queries. This document describes both, and what the cutover between them
 requires.
 
@@ -44,14 +44,14 @@ reconciliation rather than a schema.
 | --- | --- |
 | Engine | PostgreSQL 18 |
 | Database | `yada_dev` (dev) / `yada` (prod), selected by `YADA_ENV` |
-| Migrations | `0005_fred_series_catalogue` … `0009_resumable_walk` |
+| Migrations | `0005_fred_series_catalogue` … `0012_fetch_the_catalogue_whole` |
 | Upstream source | the FRED API directly — no intermediate files |
 | Collector | `apps/agentic/db/fred_discovery.py` |
 | Entry point | `clients/bin/fred_metadata.py` |
 | Notebook | `notebooks/data/fred/fred_meta_data.ipynb` |
-| Series | 846,628 |
+| Series | 854,318 |
 | Categories | 5,201 |
-| Memberships | 1,001,244 |
+| Memberships | 1,052,462 |
 
 ### Tables
 
@@ -62,9 +62,9 @@ reconciliation rather than a schema.
 | `fred_series_category` | 1,052,462 | The membership edge. A series can sit in several categories, which is why memberships exceed series by ~18%. |
 | `fred_category_scan` | 5,201 | **The reconciliation.** One row per category: `api_series_count`, `fetched_series_count`, `pages`, `status`, `error`, timings. |
 | `fred_frequency_class` | 8 | The per-class currency rule, rebuilt from the data. |
-| `fred_subcategory` | 27,385 | The derived browsable tree: 21,602 leaves, 5,783 interior nodes, non-regional only. |
-| `fred_series_subcategory` | 469,329 | Series-to-leaf assignment for the derived tree, covering 417,133 distinct series. |
-| `fred_subcategory_build` | 924 | Per-category build outcome, LLM call count and cost. 723 built, 201 already under the cap. |
+| `fred_subcategory` | 58,227 | The derived browsable tree over the whole catalogue: 47,263 leaves, 10,964 interior nodes. |
+| `fred_series_subcategory` | 1,049,892 | Series-to-leaf assignment for the derived tree, covering 851,492 distinct series. |
+| `fred_subcategory_build` | 4,919 | Per-category build outcome, LLM call count and cost. 4,606 built, 313 already under the cap. |
 
 Only `fred_category.parent_id` is stored; `category_path` is derived from it by a recursive CTE
 in `rebuild_paths`. Storing both independently is what let the old export's tree be mis-rooted
@@ -317,17 +317,20 @@ full-text search for "industrial infrastructure construction" can reach a series
 Coke Ovens Under Construction for United States", which neither full-text search nor vector
 similarity over raw titles finds.
 
-**The non-regional half is built** (2026-11-08): 723 over-cap categories, **27,385 names**,
-**$4.81**, **1 h 57 m** at 8 concurrent naming calls, 0 failed categories. 201 further
-categories were skipped as already under the cap. Both ceilings hold — no leaf over 25
-series, no node over 25 children — and every one of the 469,329 memberships lands in exactly
-one leaf. The regional half — 3,883 categories, 28,573 names, ~$5.63 — is **not** queued,
-because the facet question above should be settled first, and the run made that question
-sharper: see *Sibling name collisions* below.
+**The whole catalogue is built.** The non-regional half ran 2026-11-08 and the regional half
+2026-11-09: **4,606** over-cap categories, **58,227 names**, **$11.85**, **9 h 48 m** at 8
+concurrent naming calls, 0 failed categories. 313 further categories were skipped as already
+under the cap, and 282 hold no series at all. Both ceilings hold — no leaf over 25 series, no
+node over 25 children — and every one of the 1,049,892 memberships in a built category lands
+in exactly one leaf. The 2,570 that do not are all in skipped categories, where the flat list
+stands.
 
-The projection the run was authorised against was 27,384 names and ~$5.39. Names came in
-within one of that; cost came in **11% under**, because the per-name figure was measured on
-the probe categories, whose interior nodes summarise more children than the average.
+The projection was 55,957 names and ~$11.02, so names came in **4% over** and cost **7%
+over** — the gap being fuller leaves sending more of the title sample. **Wall-clock was the
+bad estimate: 9 h 48 m against ~3.5 h projected.** Names-per-minute was scaled from the
+non-regional run, and it is not a property of the pipeline but of the shape being named:
+concurrency is 8 calls within one level of one tree, so non-regional's wide trees sustained
+216 names/min while regional's 7.4-node trees managed 63. See section 5 of the procedure.
 
 Three things found while preparing that run are worth recording here, because all three were
 defects in a step that *looked* finished:
@@ -344,18 +347,18 @@ defects in a step that *looked* finished:
   categories reading `ok` forever under a splitter nothing else uses. `split_version` (0011)
   fixes that, and both fell back into the work queue as soon as it existed.
 
-The browsable depth that results is **6 levels median** for non-regional data (p95 8, max 9),
-counting FRED's own path and the derived levels together. The two are anti-correlated, which
+The browsable depth that results is **7 levels median** over the whole catalogue (p95 7,
+max 9), counting FRED's own path and the derived levels together. The two are anti-correlated, which
 is why the branching ceiling could be tightened without making browsing worse: `Housing` holds
 53,187 series at depth 2, while FRED's deepest path is 9 levels deep and holds **2 series**.
 Derived depth alone never exceeds 4.
 
 ### Sibling name collisions, and what they say about the scheme
 
-Found by reading the built tree rather than by testing it, and it qualifies the scope decision
-above. **4,445 of 27,385 nodes (16.2%) share a name with a sibling**, across 366 categories,
-the worst being **11 sibling leaves with one name**. A parent whose children cannot be told
-apart is precisely what this layer exists to prevent.
+Found by reading the built tree rather than by testing it, and it overturned the scope
+decision above. **6,526 of 58,227 nodes (11.2%) share a name with a sibling**, across 860 of
+the 4,606 built categories, the worst being **11 sibling leaves with one name**. A parent
+whose children cannot be told apart is precisely what this layer exists to prevent.
 
 It is not a naming defect. Each node is named from its own members with no knowledge of its
 siblings — cheap, parallel, and correct when the clusters are genuinely about different
@@ -371,23 +374,31 @@ These are **facet** categories: one measure across many places. The title embedd
 constant across the category, so there is no semantic axis to cluster on; the splitter carves
 equal parts as instructed, and every part is honestly described by the same name.
 
-**This corrects the premise of the scope split, not its conclusion.** `U.S. Regional Data` was
+**This overturns the scope split, premise and conclusion both.** `U.S. Regional Data` was
 excluded because its titles differ by place rather than by measure — stated as a property of
-that branch. The same structure is in the half that *was* built, concentrated where the data
-is cross-sectional by place:
+that branch. Building it on 2026-11-09 made the claim testable, and the excluded branch turns
+out to be the *least* affected one measured:
 
 | Branch | Collided | Nodes | Share |
 | --- | --- | --- | --- |
-| `Academic Data > Penn World Table 7.1` | 132 | 298 | 44.3% |
-| `Population, Employment, & Labor Markets > Population` | 193 | 604 | 32.0% |
+| `Academic Data > Penn World Table 7.1` | 134 | 298 | 45.0% |
+| `Population, Employment, & Labor Markets > Population` | 200 | 604 | 33.1% |
 | `Prices > Producer Price Indexes (PPI)` | 156 | 633 | 24.6% |
-| `International Data > Indicators` | 1,277 | 5,328 | 24.0% |
-| `Production & Business Activity > Housing` | 458 | 3,143 | 14.6% |
+| `International Data > Indicators` | 1,294 | 5,328 | 24.3% |
+| `Production & Business Activity > Housing` | 522 | 3,143 | 16.6% |
+| `International Data > Countries` | 733 | 7,716 | 9.5% |
+| **`U.S. Regional Data`** | **1,794** | **28,566** | **6.3%** |
 
-Excluding the regional half was right. Treating facet-shaped data as a regional phenomenon was
-not: it is a shape that occurs throughout the catalogue, and the fix — split by the place named
-in the title, which FRED already supplies and the embedding discards — is the same fix in both
-halves. See section 4.4 of the procedure.
+Regional categories are smaller, and small categories collide less, but controlling for size
+does not rescue the claim: 2.6% against 9.4% below 100 series, 6.4% against 18.4% to 499,
+13.0% against 18.1% to 1,999. Only the 2,000+ bucket reverses, on five regional categories.
+
+So facet shape is real, the reasoning about it was sound, and the branch it was aimed at was
+the wrong one. It is a property of a *category*, not of a region of the taxonomy, and the fix
+— split by the place named in the title, which FRED already supplies and the embedding
+discards — is the same fix wherever it appears. `SCOPES` is consequently a way to split a long
+run and nothing more; `--scope` has no default, because the `non-regional` one silently
+withheld 80% of the catalogue. See section 4.5 of the procedure.
 
 `notebooks/data/fred/fred_subcategories.ipynb` is where this was found; every cell is a `SELECT`, so
 it can be re-run against the live tree at no cost.
@@ -412,7 +423,7 @@ properties against the live catalogue; `clients/bin/fred_metadata.py` is what ac
 ## Part 2 — The ChromaDB catalog (still serving)
 
 This is the store every FRED query currently goes through. It covers **123,119 distinct series
-against the Postgres catalogue's 846,628 — a factor of 6.9** — carries the export defects
+against the Postgres catalogue's 854,318 — a factor of 6.9** — carries the export defects
 described above, and is still wired to the agents and to the cache.
 
 ### Identity

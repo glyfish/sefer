@@ -555,11 +555,12 @@ swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
   measured) produces derived data about meida's catalogue. It reads like meida's, but it
   is the first thing here that is neither a vendor fetch nor a mirror of one.
 
-### Status 2026-11-07 — the yada-side collection is finished
+### Status 2026-11-09 — collection and derivation are both finished
 
 The FRED catalogue is complete in yada's Postgres, collected from the API with no files in
-the middle. This does not resolve the ownership question above; it makes the handoff to
-meida concrete, since the procedure is now measured rather than proposed.
+the middle, and the derived browsable tree now covers all of it. This does not resolve the
+ownership question above; it makes the handoff to meida concrete, since the procedure is now
+measured rather than proposed.
 
 | | |
 | --- | --- |
@@ -571,6 +572,11 @@ meida concrete, since the procedure is now measured rather than proposed.
 | coverage | 853,318 of FRED's 853,320 series — **inferred**, not re-measured; the release enumeration was run once on 11-07 |
 | known shortfall | **2 series**, undiagnosed, 0.0002% of FRED |
 | cost | 10,809 paced requests, 74 minutes across three runs, $0 (FRED is free) |
+| derived tree | **58,227** nodes over **4,606** categories (47,263 leaves, max depth 4); 313 categories skipped as under the cap, 282 hold no series |
+| derived assignments | 1,049,892 — every membership in a built category in exactly one leaf; the 2,570 unassigned are all in skipped categories |
+| derived cost | **$11.85**, 9 h 48 m, 58,265 model calls across two runs (2026-11-08 non-regional, 2026-11-09 regional) |
+| derived pending | **0** in every scope |
+| unnamed nodes | **52**, of which 50 predate the retry fix; `verify` exits non-zero while any exist |
 
 What changed in the argument above:
 
@@ -578,31 +584,33 @@ What changed in the argument above:
   pass that reads the API. `fred_catalogue.py`'s YAML readers (`source_files`, `iter_source`,
   `read_source`, `build`) now have no callers and are dead code to remove; its helpers
   (`frequency_class`, `currency_cutoffs`) are still live.
-- **`is_active` has its answer.** `currently_relevant` is computed for all 846,628 series
-  (585,251 true) from per-frequency p95 cutoffs, so meida's always-NULL column has a
+- **`is_active` has its answer.** `currently_relevant` is computed for all 854,318 series
+  (587,138 true) from per-frequency p95 cutoffs, so meida's always-NULL column has a
   populated equivalent to copy the method from.
-- **The derivation scale doubled, and split.** The non-regional half is **built**: 27,385
-  names, **$4.81**, 1 h 57 m at 8 concurrent calls, completed 2026-11-08, 723 categories, no
-  cap violations. Regional is projected at ~$5.63 and is **not settled**: county titles differ
-  by place, not by measure, so the semantic split would cluster on the wrong axis. See
-  [yada-fred-subcategory-procedure.md](yada-fred-subcategory-procedure.md) §4.4. BIS's SDMX
-  dimensions are what the right shape looks like, which strengthens the "shared retrieval
-  contract, per-source catalogs" reading rather than the one-table one.
+- **The derivation is complete.** Both halves are **built**: 4,606 categories, **58,227
+  names**, **$11.85**, 9 h 48 m at 8 concurrent calls, finished 2026-11-09, no cap violations,
+  0 pending in any scope. The regional half was held back pending the facet question in
+  [yada-fred-subcategory-procedure.md](yada-fred-subcategory-procedure.md) §4.4; building it
+  answered that question against §4.4 (next bullet but one). BIS's SDMX dimensions are still
+  what the right shape looks like, which strengthens the "shared retrieval contract,
+  per-source catalogs" reading rather than the one-table one.
 
-  The §4.4 argument got stronger when the depth was measured. Regional categories already sit
-  **5 levels deep** in FRED's own tree (3,078 as `States > <State> > Counties > <County>`);
-  deriving under that reaches a median of 6 clicks and a maximum of 8, to browse data whose
-  natural shape is two selections. FRED's place hierarchy *is* one of the two facets, so a
-  facet scheme would get it free and need derived nodes only for the measure axis — making the
-  regional half cheaper than the non-regional one rather than dearer.
+  **The time estimate was the one that failed: 9 h 48 m against ~3.5 h projected.** Cost and
+  node counts landed within 7% and 0.01%, but names-per-minute was scaled from the
+  non-regional run and it is not a property of the pipeline. Concurrency is 8 calls within one
+  level of one tree, so non-regional's wide trees ran at 216 names/min and regional's, which
+  average 7.4 nodes in total, at 63. Scale a future run's wall-clock from categories of
+  comparable size, or model the concurrency.
 - **The earlier $4.29 was wrong, and agreed with its predecessor by coincidence.** It was
   presented as the cost model holding across a doubling ("$4.29 against the $4.20 estimated
   from the 424,634-series catalogue"). Two errors happened to cancel: the node count counted
   the leaf floor, which under-reports by a third, and the per-name cost was measured on
   sparse leaves. The node count now simulates the recursion instead, and held up: across the
-  723 categories actually built it predicted **27,384 against 27,385**, exact for 93.4% of
-  categories individually, though with a long tail (worst case a third low) that makes it a
-  total to budget from rather than a per-category guarantee.
+  4,606 categories actually built it predicted **58,222 against 58,227 (-0.01%)**, exact for
+  98.1% of categories individually, though with a long tail (worst case a third low) that
+  makes it a total to budget from rather than a per-category guarantee. The 98.1% flatters it:
+  regional scores 99.6% and non-regional 90.2%, because small categories are predicted
+  exactly and most regional ones are small.
 - **Three defects in the derivation, found by measuring a built tree rather than reading the
   code.** The splitter produced **depth 8** trees with singleton leaves for a 9,932-series
   category (unbalanced k-means amplifies an uneven split into depth); `BRANCH_CAP` was
@@ -610,35 +618,48 @@ What changed in the argument above:
   non-regional categories; and the tree *shape* was unversioned, so the two trial categories
   would have read `ok` forever under a splitter nothing else uses. All three are fixed and
   measured — see the procedure's §2.2. Cost of finding them: $0.09 of probe runs.
-- **New, and it revises the scope split: facet-shaped data is in the half that was built.**
-  Reading the finished tree shows **4,445 of 27,385 nodes (16.2%) share a name with a
-  sibling**, 366 categories affected, worst case 11 sibling leaves under one name. The cause
-  is not the namer: in those categories the member titles are identical except for a place
-  name at the end, so the title embedding is near-constant and there is no semantic axis to
-  split on. It concentrates in `Academic Data > Penn World Table 7.1` (44.3% of its nodes),
-  `International Data > Indicators` (24.0%) and `Housing` (14.6%).
+- **The scope split is overturned, premise and conclusion both.** The finished tree has
+  **6,526 of 58,227 nodes (11.2%) sharing a name with a sibling**, 860 of 4,606 categories
+  affected, worst case 11 sibling leaves under one name. The cause is not the namer: in those
+  categories the member titles are identical except for a place name at the end, so the title
+  embedding is near-constant and there is no semantic axis to split on.
 
-  §4.4 excluded the regional half for exactly this reason but framed it as a property of the
-  regional branch. The exclusion was right; the framing was not, and the consequence is that
-  **the gate on the regional spend should be a facet *test*, not a path prefix** — a category
-  whose titles share a long common prefix is detectable from the titles alone, before any
-  model call. De-duplicating the names would not help: 11 distinguishable labels over
-  arbitrary thirds of one undifferentiated pile is the same defect, better hidden. Written up
-  as procedure §4.5; found by `yada/notebooks/data/fred/fred_subcategories.ipynb`.
+  §4.4 excluded the regional half for exactly this reason, as a property of the regional
+  branch. Building it made that measurable, and the excluded branch is the **least** affected
+  one: 6.3% against non-regional's 16.0%, and the ordering survives controlling for category
+  size (2.6% vs 9.4% below 100 series, 6.4% vs 18.4% to 499, 13.0% vs 18.1% to 1,999). The
+  worst offenders were never in question — `Penn World Table 7.1` at 45.0% of its nodes,
+  `International Data > Indicators` at 24.3%, `Housing` with 522 collided nodes.
+
+  Three consequences. **A facet test replaces the path prefix** — a category whose titles
+  share a long common prefix is detectable from the titles alone, before any model call — but
+  it is no longer a gate on spending; its job now is deciding which of the 860 collided
+  categories a facet pass should rebuild. **De-duplicating names would not help**: 11
+  distinguishable labels over arbitrary thirds of one undifferentiated pile is the same defect,
+  better hidden. And **`SCOPES` is now only a way to split a long run** — `--scope` has no
+  default, since `non-regional` silently withheld 80% of the catalogue. Written up as
+  procedure §4.5; found by `yada/notebooks/data/fred/fred_subcategories.ipynb`.
 - **New, smaller, and a trap for the search tooling.** The concepts bridge works, but **not
   under `websearch_to_tsquery`**, which ANDs its terms and returns zero rows for every query
   the layer exists to answer. Ranked OR matching puts a sensible node first where lexical
   title search returns nothing. Whoever wires FRED search will reach for the obvious operator
   and conclude the layer is useless.
-- **Open: 38 unnamed nodes** from the run, 3 of them a category's own root. Recorded three
-  ways on purpose (placeholder name, `naming_failures`, run log), and `verify` exits non-zero
-  while they exist. Rebuilding the 30-odd affected categories costs a few cents.
+- **Open: 52 unnamed nodes**, 3 of them a category's own root. Recorded three ways on purpose
+  (placeholder name, `naming_failures`, run log), and `verify` exits non-zero while they
+  exist. **50 of the 52 predate the retry fix of 2026-11-08** and clear on a rebuild of their
+  39 categories. The fix is the interesting part: `Namer._call` retried a reply the model had
+  *truncated* but returned immediately on one that simply was not JSON — and every observed
+  failure was the second kind (0 truncations against 50 parse failures), so the retry covered
+  the case that never happens. Evidence it is stochastic rather than a hard input: rebuilding
+  38 countries cleared 12 failures and produced 24 elsewhere. With `NAMING_ATTEMPTS = 3`
+  covering both kinds, the 3,874-category regional run produced **2 failures in 28,577 calls**
+  against the old code's rate of roughly one in 215.
 - **Still true:** the catalogue is in yada and should end up in meida. Nothing reads it from
   the application yet, so moving it costs no rewiring today and will cost more later.
 
 **New, open: 1,000 held series belong to no release.** Enumerating all 337 releases yields
 853,320 series with **zero appearing in two releases**, so one-release-per-series is a measured
-property and the denominator needs no correction. Against that set, 845,628 of our 846,628 held
+property and the denominator needs no correction. Against that set, 853,318 of our 854,318 held
 series are accounted for and **exactly 1,000 are not listed by any release**.
 
 **Diagnosed 2026-11-07, and it is ours.** The roundness was the clue: 1,000 is exactly `PAGE`,

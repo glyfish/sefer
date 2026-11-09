@@ -290,13 +290,15 @@ chain. The whole schema is one rolled-up alembic revision (`0001_initial_schema`
 
 **FRED metadata catalogue.** Eight tables (`fred_series`, `fred_category`,
 `fred_series_category`, `fred_category_scan`, `fred_frequency_class`, and the three
-`fred_subcategory*` tables) hold a discovery index over FRED's 846,628 series, collected
+`fred_subcategory*` tables) hold a discovery index over FRED's 854,318 series, collected
 directly from the API by `apps/agentic/db/fred_discovery.py` and driven by
 `clients/bin/fred_metadata.py`. Its organising idea is a **reconciliation**: every fetch stores
 `api_series_count` beside `fetched_series_count`, and `status = 'ok'` is only reachable when
-they agree, so incompleteness is a queryable row rather than a silent success. A deliberate
-limit is recorded in `page_limit`, which is what distinguishes a capped category from a failed
-one. This replaces a YAML-and-Chroma path that was wrong four ways without symptom -- see
+they agree, so incompleteness is a queryable row rather than a silent success -- and as of
+`0012` there is nothing else: the two columns that recorded a deliberate omission
+(`page_limit`, `excluded_reason`) are gone, the catalogue is fetched whole, and a gap is
+therefore always a fault. This replaces a YAML-and-Chroma path that was wrong four ways
+without symptom -- see
 [data-store-fred.md](data-store-fred.md). It is complete but **not yet wired to any agent**:
 FRED search still goes through ChromaDB.
 

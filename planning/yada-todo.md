@@ -585,12 +585,35 @@ is the work that closes the loop**, and it comes in two sizes:
   cost: if meida ever wants a catalogue, this is not one it can adopt as-is. Recorded here so
   it is not rediscovered later as a defect.
 
-**Open, and the one place the split blurs.** "meida owns the FRED MCP APIs" is unambiguous
-for data access — fetch series, observations, catalog lookup. It is less obvious where
-*search over the FRED document store* sits. If that store follows the merged
-`search_code` / `describe_code` pattern it gets `search_fred` / `describe_fred` on **yada's**
-MCP server, which is a document-search tool rather than a FRED API — but it can be heard as
-one. Settle this in a sentence before building either.
+**Settled 2026-11-15 (user): meida owns the FRED *interface* API, not the FRED *document*
+API.** Generalised, because it has to decide BIS/BLS/FBI too:
+
+> Whoever wraps the vendor owns the interface API. Whoever built the corpus owns the
+> document API over it.
+
+So `search_fred` / `describe_fred` go on **yada's** MCP server. The worry that it would be
+*heard* as a FRED API is answered by a mechanical test rather than a principle: across
+meida's 32 tools the FRED namespace and the search verb do not intersect.
+
+| | meida | yada |
+|---|---|---|
+| verb | `category_children`, `category_series`, `release_series`, `series_info`, `series_observations`, `series_updates` | `search_fred`, `describe_fred` |
+| reads | FRED's API | what yada built |
+
+meida's only search tool is `series_catalog_search`, and `series_catalog` holds no FRED —
+checked live, it returns cdc/clio/fbi rows. So `search_*` is free in the FRED namespace and
+the name cannot collide with anything meida publishes now.
+
+The name keeps the source word rather than taking a content word as `search_code` does.
+That convention does not reach this case: `search_code` is named for content *because* its
+store is named for its source (`GITHUB_DB_NAME = "github"`). FRED has no store and no Chroma
+collection any more — it has Postgres tables — so there is no second name to be consistent
+with, and `search_fred` keeps the yada/meida pairing legible.
+
+**The split spans two servers and that is fine.** Goose searches on yada and fetches on
+meida. The `series_catalog` retrieval-block pattern already closes that seam: every row
+names the tool that fetches it, so `search_fred` rows naming `fred_series_observations`
+compose the two servers with no coordination.
 
 **Pending:** a todo on the meida side recording this, once the design is clear. The user's
 read is that no meida code changes are needed; the todo is a record, not work.

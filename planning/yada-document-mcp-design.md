@@ -133,6 +133,50 @@ has a GitHub MCP server, a model must choose between yada's index of 101 cloned 
 the live API with nothing in the name to separate them. Routing from names alone is this
 design's premise, so a name that mis-signals is a correctness problem, not a style one.
 
+### 2.1a The verb carries the namespace — `search_fred`, and the stores beyond Chroma
+
+**Decided 2026-11-15 (user).** Every document store on yada's MCP server is reached as
+`search_<store>` / `describe_<store>`. The store word is the store's own name, and the verb
+goes first. That is already what `search_code` and `search_research_library` do; writing it
+down makes it a rule rather than a habit, and extends it to `fred` and `etf`.
+
+**This looks like it contradicts §2.1 and does not.** §2.1 gives two reasons to prefer
+`search_code` over `search_github`, and they do not transfer together:
+
+- *"The word GitHub never appears"* — does not transfer. People say "FRED" for economic
+  data; nobody says "GitHub" for their own code. The content word and the source word are
+  the same here.
+- *"`search_github` collides with the actual GitHub"* — **does transfer, and is live.**
+  meida is exactly the "client that also has a server for that source": six `fred_*` tools
+  in the same Goose session.
+
+What defuses the collision is grammar, which §2.1 did not have to consider because
+`search_github` and a GitHub server would spell themselves the same way. meida and yada do
+not. Measured across meida's 32 tools:
+
+| | meida | yada |
+|---|---|---|
+| word order | noun-first, verb last — `series_catalog_search`, `timeseries_source_list` | verb-first — `search_code`, `search_fred` |
+| count | 31 of 32 noun-first (`list_releases` is the lone exception) | all four verb-first |
+| FRED ∩ search | **empty** — no meida tool both names FRED and searches | `search_fred`, `describe_fred` |
+
+So a model choosing between `search_fred` and `fred_series_observations` is not choosing
+between two spellings of one idea; it is choosing a verb. meida's only search tool is
+`series_catalog_search`, and `series_catalog` holds no FRED — checked live, it answers with
+cdc/clio/fbi rows.
+
+The rule that follows, and that decides BIS/BLS/FBI as they arrive: **whoever wraps the
+vendor owns the interface API; whoever built the corpus owns the document API over it.**
+Interface APIs are spelled source-first, document APIs verb-first.
+
+**Two of these stores are no longer Chroma.** This document's header describes the github
+and research_library Chroma stores. `fred` and `etf` are Postgres: the FRED catalogue, its
+derived tree, and two GIN indexes (`fred_series.title_tsv`, `fred_subcategory.name_tsv`)
+that exist and have no reader yet. `FRED_COLLECTION_NAME`, `FRED_DB_NAME`,
+`ETF_COLLECTION_NAME` and `ETF_DB_NAME` survive only in the document loaders, which are
+slated for removal. The tool *surface* is unchanged by that — two verbs, one store each —
+but nothing below `search_fred` resembles `_search()` in `document_tools.py`.
+
 ### 2.2 Why `search` and `describe` are separate tools
 
 A merged `search_or_describe(query=None, …)` is representable, and it fails the same test

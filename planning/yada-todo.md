@@ -595,6 +595,118 @@ one. Settle this in a sentence before building either.
 **Pending:** a todo on the meida side recording this, once the design is clear. The user's
 read is that no meida code changes are needed; the todo is a record, not work.
 
+### New requirement: meida exposes its data over MCP, not files
+
+**Raised 2026-11-15 (user).** meida should expose **all** of its data through MCP rather
+than through files beside its notebooks. The user will make the meida-side changes; this
+subsection is the measured inventory so the requirement is clear before that starts, and so
+the blast radius is known rather than guessed.
+
+**The rule it overturns** is stated outright in meida's own docs
+(`sefer/meida/api/fbi.md`):
+
+> The catalog is **not** loaded into `series_catalog` and is not meant to be: a live API
+> source keeps its catalog as files for the document store, and Postgres holds only the
+> sources whose observations are stored.
+
+So the current split is deliberate — stored observations in Postgres, live-API catalogues in
+files — not an accident to be tidied up.
+
+#### Where each source stands
+
+| Source | Observations | Catalogue | Fully on MCP? |
+| --- | --- | --- | --- |
+| CDC Socrata | live, 6 tools | `series_catalog`, 2,346 rows | **yes** |
+| CDC WONDER | stored, 9 series | `series_catalog` | **yes** |
+| CDC NVSR | stored, 171 series | `series_catalog` | **yes** |
+| Clio-Infra | stored, 11,042 | `series_catalog`, 11,042 | **yes** |
+| Clio-Infra historical | stored, 391 | `series_catalog`, 391 | **yes** |
+| Voteview | stored, 8 | `series_catalog`, 8 | **yes** |
+| FRED | live, 7 tools | **files**, 206 MB / 220,401 series | observations only |
+| BLS | live, 5 tools | **files**, 148 MB / 288,085 series | observations only |
+| BIS | live, 3 tools | **files**, 18 MB / 26,902 series | observations only |
+| FBI | live, 3 tools | **files**, 3,886 entries | observations only |
+| Tiingo | live, 2 tools | **none at all** | observations only |
+
+`series_catalog` holds 13,967 rows and `time_series_source` 11,621 series. Every catalogue
+row carries a `retrieval` block naming its fetch tool, which is what lets one listing span
+the live and stored routes.
+
+**So the work is four catalogues, not eleven sources** — and clio, clio_historical and
+voteview are already done. Voteview is the proof case: it "needed **no server code** at all,
+no client module and no `source`-specific branch." The files under `notebooks/*/data/` for
+those three are raw acquisition artefacts, not a serving path.
+
+#### The four, ranked by what is actually in the way
+
+1. **BIS — easiest; pure re-wiring.** `export_bis_catalog()` makes exactly three calls and
+   each already has a matching MCP tool with matching arguments: `get_dataflows()` →
+   `bis_dataflows`, `get_datastructure()` → `bis_datastructure`, and `get_data(flow, "all")`
+   → `bis_series_data`, whose `key` parameter *defaults to* `"all"`. Using `BisClient`
+   directly was a choice, not a necessity. That it is REPL-only (no notebook calls it) makes
+   this *smaller*, not larger — there is no caller to migrate.
+2. **FBI — blocked, but by something named.** The catalogue is built from `FbiClient`,
+   mirroring its three MCP tools, and `db_import.load_catalog.load(DATA_DIR, "fbi")` would
+   work today because the loader is source-generic. What blocks it is that loading now would
+   **silently discard the five measured fields** the 2,736 arrest entries carry — the subject
+   of `sefer/meida/series-catalog-quality-fields.md`.
+3. **BLS — genuinely hard, and the only structural case.** The BLS API **cannot enumerate
+   series** (25 "popular" per survey, no coverage dates, no index bases), so the flat-file
+   pipeline cannot be replaced by MCP — only re-pointed at a different destination. Note the
+   survey layer *is* already on MCP (`bls_all_surveys`, `bls_survey_info`), but the catalogue
+   does not use it: `survey.yaml` joins `overview.txt` with per-survey `.series` stats and the
+   fetch manifest, because the MCP version carries two fields where the catalogue needs ten.
+4. **FRED — superseded, not migrated.** meida's catalogue is 220,401 series in 944 categories
+   and deliberately partial, skipping `27281 States`, `32071 Federal Reserve Districts` and
+   `32233 Freddie Mac Regions`. Its named consumer is **yada's `fred_document_loader`**. yada's
+   own catalogue is 854,318 series across 5,201 categories and includes exactly those skipped
+   branches, so meida's FRED export is obsolete rather than pending — 206 MB of the ~400 MB
+   comes off the board.
+
+That leaves roughly **319k rows** (BLS 288,085 + BIS 26,902 + FBI 3,886) against
+`series_catalog`'s current 13,967.
+
+#### One convention, three sources
+
+In BLS, BIS and FBI alike the *notebook helpers* call MCP and the *exporters* call the vendor
+client directly. BLS states the reason: `fetch_popular_ids` "uses the BLS API **directly (not
+the MCP server)**, so it fits the otherwise offline generation flow." That is a single
+deliberate convention, not three oversights, so the requirement should say explicitly that it
+overrides it — and what replaces the offline property, since a 75-minute gentle pull against
+`download.bls.gov` was built to run without the MCP server up.
+
+#### A contradiction already inside meida's docs
+
+Both of these are in `sefer/meida/series-catalog.md`, and they cannot both stand:
+
+- `series_catalog` is "deliberately **not** CDC-specific … so the BIS and BLS catalogs can
+  load here later **without a migration**."
+- "some catalogues **would not fit it anyway** — BLS alone is 288,085 series."
+
+Nothing measured sits behind "would not fit"; it reads as a volume intuition, and 288k rows
+is unremarkable for Postgres. The real question is shape, not size: whether `series_catalog`
+suits BLS's per-survey `catalog.additional_fields` (the key set varies by survey) and BIS's
+SDMX dimensions. Answer that before writing the meida requirement.
+
+#### Open, and worth deciding explicitly
+
+- **Transport for a bulk catalogue.** 288,085 BLS series through MCP tool calls, for a
+  document-store build that wants the whole corpus, is an awkward shape. It needs either a
+  resumable paginated cursor — the thing `fred_category_scan` exists to make safe for FRED —
+  or a bulk-export tool returning a location, which starts to look like a file again, just
+  one meida controls.
+- **Tiingo has no catalogue at all.** A gap rather than a file problem, so "everything over
+  MCP" does not by itself say what to do. Scope it in or out explicitly.
+- **CDC stops being provisional.** `series-catalog.md` says its Socrata rows are there only
+  because "its document store has not been built yet … read CDC as work in progress rather
+  than as the pattern to copy." Under this requirement CDC *becomes* the pattern.
+- **A stale figure to fix when meida is touched.** `meida/architecture.md` says FBI has
+  "1,150 catalogue entries across 11 files"; `meida/api/fbi.md` says 3,886, after the arrest
+  harvest of 2026-10-11 added 2,736. The architecture table predates the harvest, and 1,150
+  against 3,886 would mis-size the load.
+
+**Pending:** the meida-side todo, once the design is settled. No meida code has been changed.
+
 ### What is still missing even in meida
 
 1. **`load_catalog.py` reads YAML.** The same file hand-off, one repo over. Discovery
@@ -846,6 +958,8 @@ can be live, defensible, documented, and still only exist because nobody revisit
 | The four routers: `DocumentAgent`, `TimeSeriesAgent`, `PlotAgent`, `TimeSeriesReportAgent` | **undecided** — collapse into client routing, or survive as agent-backed MCP tools | §5.6 leaves this open |
 | `clients/bin/fred.py` and the Chroma `fred` collection | the Postgres catalogue plus the derived subcategory tree | §5; still wired to three agents |
 | `fred_catalogue.py`'s YAML readers — `source_files`, `iter_source`, `read_source`, `build` | nothing; already callerless | **ready now**, and the cheapest one |
+| **All the Chroma document loaders** — `chroma_document_loader.py`, `fred_document_loader.py`, `github_document_loader.py`, `research_library_document_loader.py`, `etf/finance_database_loader.py` | the document MCP tools (`search_code`/`describe_code`, `search_research_library`/`describe_research_library`) plus, for FRED, the Postgres catalogue | the stores they build still being read; see below |
+| `DocumentLoaderAgent` (`agents/document/document_loader_agent.py`) and its five load tools | MCP elicitation plus whatever runs a load outside an agent | the loaders above, and the forms decision |
 | `notebooks/data/human_in_the_loop.ipynb` steps 2–5 | whatever tests the elicitation round-trip | the forms phase. Step 1 does **not** go — see below |
 
 ### What survives that looks like it should not
@@ -858,6 +972,33 @@ can be live, defensible, documented, and still only exist because nobody revisit
   goes would take `forms.py` with it. It should not.
 - **`human_in_the_loop.ipynb` step 1** is the executable description of those schemas, and
   is the one part of that notebook with a life after the orchestrator.
+
+### Removing the document loaders — what makes it bigger than it looks
+
+**Added 2026-11-15 (user): "remove all of the document loader code" once this is finished.**
+The intent is clear and right — the loaders exist to turn *files* into Chroma collections,
+and after the MCP migration there are no files to turn. Three things make it a pass rather
+than a delete, and all three are the §6 failure mode rather than ordinary dead code.
+
+- **`ChromaDocumentLoader` is a base class, not a utility.** `ChromaRAGAgent` takes one as a
+  constructor argument (`chroma_rag_agent.py:129`), so every RAG agent built on it —
+  `CodeRepoAgent`, `ResearchLibraryAgent`, `FredDataInfoAgent` — goes with the loaders. That
+  is intended, but it means the unit of removal is the whole Chroma document path, and it
+  cannot happen before the MCP document tools are the only reader.
+- **`series_metadata.py` is the consumer nobody will look for.** It imports
+  `FREDChromaDocumentLoader` directly (`series_metadata.py:4`, registered at `:20`) so that
+  `catalog_metadata("fred", ...)` can copy four fields out of Chroma into every FRED cache
+  row. **It is not an agent**, so an agent-by-agent sweep misses it, and retiring the Chroma
+  `fred` store is a cutover rather than an agent swap because of it.
+- **`fred_document_loader.py` is the one that can go first, and it is also the one holding
+  the FRED work up.** It reads YAML from `clients/fred/` (`FRED_LOCAL_PATH`), which is why
+  nothing in `apps/` imports `fred_discovery` — the consumer of the catalogue is still
+  reading the export the catalogue replaced. Re-pointing it at Postgres is §5's "closes the
+  loop" item; deleting it outright comes after the store it builds has no readers.
+
+The ordering that falls out: **re-point the FRED loader → cut over `series_metadata` →
+retire the Chroma `fred` store → remove the remaining loaders with the RAG agents.** Only the
+first is worth doing before the migration completes.
 
 ### Why a single pass, and not opportunistically
 

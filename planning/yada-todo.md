@@ -512,7 +512,11 @@ facets rather than trying to pick a series out by its prose."* Measured on FRED:
 of series share their `notes` with another series**, 19,332 of them sharing one identical
 sentence. Same finding, reached twice, from two directions.
 
-### Consequence: the FRED catalogue is in the wrong repo
+### Superseded: "the FRED catalogue is in the wrong repo"
+
+**Reversed 2026-11-15 by the decision below.** Kept because the reasoning was sound on the
+premise it had, and the premise is the thing that changed: this section treats the download
+as a vendor mirror, which is the one thing it is not.
 
 `b9f7ff6` built `fred_series`, `fred_category`, `fred_series_category` and
 `fred_frequency_class` in **yada's** database, with yada as the writer. That duplicates
@@ -526,6 +530,70 @@ Nothing is lost by leaving it in place meanwhile: it is behind no tool yet, and 
 `series_metadata.catalog_metadata("fred", ...)`, which copies four fields out of Chroma into
 every FRED cache row. That second consumer means retiring Chroma is a cutover, not an agent
 swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
+
+### Decided: yada owns the download, because presentation drives it
+
+**Decided 2026-11-15 (user).** yada owns the FRED download *and* the derived layer. meida
+keeps the FRED MCP APIs, and **no meida code changes are needed**. This reverses the section
+above.
+
+**The reason is coupling, not territory.** Requirements developed for the presentation are
+changing what gets downloaded, so the download has to sit with the thing that knows those
+requirements. The architecture also moved underneath the earlier argument: the download is
+now step one of building the **FRED document store**, which is unambiguously yada's, rather
+than a second copy of meida's catalogue. Automation is what did it — what was a manual
+export is now a paced, resumable, reconciled pull, and the derived tree on top of it goes
+beyond the original design by design.
+
+The evidence is the week's own changes. Every one of these was driven by what a presentation
+needs, and none by what FRED has:
+
+| change | the presentation requirement behind it |
+| --- | --- |
+| `page_limit` removed (0012) | a browsable catalogue cannot have concept-shaped holes — the cap kept `DEU*` and dropped `LFU*`, `NGDP*`, `PRC*` whole |
+| the derived tree exists at all | FRED's taxonomy bottoms out above browsable size: 206 categories hold 500+ series directly, the largest 53,187 |
+| `concepts` | search needs a vocabulary bridge: `joblessness` reaches 1,767 derived nodes and **zero** of 854,318 raw titles |
+| `currently_relevant` | a flat date cutoff keeps 0.3% of annual series against the per-class rule's 73.7% — a filter that would quietly mislead |
+| the facet finding (§4.5 of the procedure) | a parent whose children cannot be told apart is **only** a defect if something reads it |
+
+The last row is the clearest case: that defect is invisible from the data side, was found by
+browsing the built tree, and its fix reaches back into how the tree is constructed. Under the
+earlier ownership it would have had to cross a repo boundary to change anything.
+
+**The missing consumer, which this also explains.** Nothing in `apps/`, `mcp_server/` or
+`api/` imports `fred_discovery`, `fred_catalogue` or `fred_subcategory`, and the reason is
+not that the catalogue is unwanted — it is that `FREDChromaDocumentLoader` still reads the
+YAML export from `clients/fred/` (`FRED_LOCAL_PATH`). The Postgres work replaced the
+*download* and nothing replaced the *document-store build*, which is why the Chroma `fred`
+store covers 123,119 series against Postgres's 854,318. **Re-pointing that loader at Postgres
+is the work that closes the loop**, and it comes in two sizes:
+
+1. **Rebuild the Chroma `fred` collection from Postgres** instead of YAML. Both existing
+   consumers keep working untouched. Small and safe.
+2. **Replace Chroma `fred` with Postgres-backed search plus MCP tools.** This is the cutover,
+   and `catalog_metadata("fred", ...)` is why — it is not an agent, so it is easy to miss.
+
+**Three things that follow, and should be treated as rules rather than current facts:**
+
+- **Keep `fred_category_scan`'s reconciliation strict.** It is what makes a volatile download
+  safe: every change either reconciles or reports a fault, and since 0012 no column can
+  record a gap as intentional. The contract is load-bearing *because* the download now moves.
+- **meida must not depend on yada's FRED schema.** If presentation drives these tables they
+  will keep moving, and a consumer across the repo boundary would turn every UI requirement
+  back into the cross-repo negotiation this decision removes.
+- **These tables are presentation-shaped, not a neutral vendor mirror.** That is a chosen
+  cost: if meida ever wants a catalogue, this is not one it can adopt as-is. Recorded here so
+  it is not rediscovered later as a defect.
+
+**Open, and the one place the split blurs.** "meida owns the FRED MCP APIs" is unambiguous
+for data access — fetch series, observations, catalog lookup. It is less obvious where
+*search over the FRED document store* sits. If that store follows the merged
+`search_code` / `describe_code` pattern it gets `search_fred` / `describe_fred` on **yada's**
+MCP server, which is a document-search tool rather than a FRED API — but it can be heard as
+one. Settle this in a sentence before building either.
+
+**Pending:** a todo on the meida side recording this, once the design is clear. The user's
+read is that no meida code changes are needed; the todo is a record, not work.
 
 ### What is still missing even in meida
 
@@ -541,9 +609,10 @@ swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
 
 ### Open questions
 
-- **Does yada keep any writable store?** The document stores (`github`,
-  `research_library`) are yada's own content and have no other owner, so probably yes —
-  the rule is one writer per database, not one database.
+- ~~**Does yada keep any writable store?**~~ **Answered 2026-11-15: yes, including FRED.**
+  The document stores (`github`, `research_library`) are yada's own content and have no
+  other owner; the FRED catalogue joins them, because it is how the FRED document store gets
+  built. The rule is one writer per database, not one database.
 - ~~**How does discovery run?**~~ **Answered 2026-11-07: a CLI.** `clients/bin/fred_metadata.py`
   (`status` / `walk` / `fetch` / `all` / `resync`, with `--limit`, `--revisit`,
   `--dry-run`). A notebook cannot resume, and a 45-minute paced pull that dies at 40 needs
@@ -551,9 +620,10 @@ swap; the order is in [../yada/data-store-fred.md](../yada/data-store-fred.md).
   `notebooks/data/fred/fred_meta_data.ipynb` illustrates the API and proves the idempotency
   properties, which is the part a notebook is good for. Whether it also wants a *schedule*
   is still open — `resync` exists and is safe to run repeatedly, but nothing runs it.
-- **Which app owns the topic layer?** Clustering plus LLM naming (~$0.36 one-time,
-  measured) produces derived data about meida's catalogue. It reads like meida's, but it
-  is the first thing here that is neither a vendor fetch nor a mirror of one.
+- ~~**Which app owns the topic layer?**~~ **Answered 2026-11-15: yada.** It was already the
+  odd one out — "neither a vendor fetch nor a mirror of one" — and that is precisely why it
+  belongs with the presentation that shapes it. It is also no longer ~$0.36 one-time: the
+  built tree is 58,227 nodes and $11.85, and the facet split will rebuild part of it.
 
 ### Status 2026-11-09 — collection and derivation are both finished
 
@@ -654,8 +724,11 @@ What changed in the argument above:
   38 countries cleared 12 failures and produced 24 elsewhere. With `NAMING_ATTEMPTS = 3`
   covering both kinds, the 3,874-category regional run produced **2 failures in 28,577 calls**
   against the old code's rate of roughly one in 215.
-- **Still true:** the catalogue is in yada and should end up in meida. Nothing reads it from
-  the application yet, so moving it costs no rewiring today and will cost more later.
+- **No longer true, as of 2026-11-15:** this said the catalogue should end up in meida.
+  yada owns it — see the decision in §5. The observation underneath it still stands and now
+  reads the other way: nothing in the application reads the catalogue yet because
+  `FREDChromaDocumentLoader` still builds the FRED document store from the YAML export, and
+  re-pointing it at Postgres is the work that gives the catalogue its consumer.
 
 **New, open: 1,000 held series belong to no release.** Enumerating all 337 releases yields
 853,320 series with **zero appearing in two releases**, so one-release-per-series is a measured

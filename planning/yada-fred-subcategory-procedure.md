@@ -1,10 +1,13 @@
 # FRED catalogue discovery and subcategory derivation — the procedure
 
-**Audience: whoever implements this in meida.** It was built in yada because that is where
-the context was (2026-11-01), but it belongs in meida, which owns the vendor clients and
-builds the metadata catalogues. See `yada-todo.md` §5 for the ownership argument. This
-document is the specification, not a description of yada's files — it records what each
-step does, why it does it that way, and which decisions were measured rather than assumed.
+**Audience: whoever maintains this in yada.** It was written on 2026-11-01 for an
+implementer in meida, on the reading that meida owns the vendor clients and builds the
+metadata catalogues. **That was reversed on 2026-11-15:** yada owns the download and the
+derived layer, because requirements developed for the presentation are what change them, and
+because the download is step one of building yada's own FRED document store. meida keeps the
+FRED MCP APIs. See `yada-todo.md` §5. This document is still a specification rather than a
+description of yada's files — it records what each step does, why it does it that way, and
+which decisions were measured rather than assumed.
 
 Reference implementation: `yada/apps/agentic/db/fred_discovery.py`,
 `yada/apps/agentic/db/fred_subcategory.py`, migrations `0006`–`0011`, and the two entry
@@ -647,15 +650,18 @@ the facet shape it describes turned out to be present in the non-regional half t
    probe runs against the $5.39 they would otherwise have been baked into. Build three real
    categories, read their depth, leaf sizes and branching, *then* commit to the scope.
 
-## 7. Open, for meida
+## 7. Open
 
-- **Which repo owns this.** meida owns the vendor clients and the working FRED key; yada's
-  is unregistered. `yada-todo.md` §5 argues the whole thing belongs there.
-- **Whether derived `concept` shares a column with sourced `concept`.** meida's
-  `series_catalog.concept` comes from source columns for CDC and Clio; FRED's would come
-  from a clustering run and an LLM call. Same column, very different provenance and failure
-  modes — a hallucinated concept is a silent misroute. A `concept_source` discriminator, or
-  separate columns, rather than mixing them.
+- ~~**Which repo owns this.**~~ **Answered 2026-11-15: yada.** The earlier argument rested on
+  meida owning the vendor clients and the working FRED key — yada's key works now, and the
+  catalogue was collected with it (10,809 requests, $0). `yada-todo.md` §5 records the
+  reversal and what drove it.
+- ~~**Whether derived `concept` shares a column with sourced `concept`.**~~ **Moot under the
+  split, but the hazard is not.** The two now live in different databases: yada's derived
+  terms are `fred_subcategory.concepts`, meida's sourced ones are `series_catalog.concept`.
+  The reason they should not have mixed still holds wherever they meet — a hallucinated
+  concept is a silent misroute, so anything merging them needs a provenance discriminator
+  rather than one column.
 - **Whether the regional facet scheme belongs here at all.** §4.4 argues the semantic
   tree is the wrong shape for 4,173 of 5,201 categories. If meida builds facets, the place
   hierarchy FRED already supplies is one axis for free and the derived tree is needed only

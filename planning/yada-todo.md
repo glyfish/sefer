@@ -690,11 +690,14 @@ SDMX dimensions. Answer that before writing the meida requirement.
 
 #### Open, and worth deciding explicitly
 
-- **Transport for a bulk catalogue.** 288,085 BLS series through MCP tool calls, for a
-  document-store build that wants the whole corpus, is an awkward shape. It needs either a
-  resumable paginated cursor — the thing `fred_category_scan` exists to make safe for FRED —
-  or a bulk-export tool returning a location, which starts to look like a file again, just
-  one meida controls.
+- **Transport for a bulk catalogue — a BLS problem, not a general one.** A document-store
+  build wants the whole corpus, and 288,085 BLS series through MCP tool calls is an awkward
+  shape: it needs either a resumable paginated cursor (what `fred_category_scan` exists to
+  make safe for FRED) or a bulk-export tool returning a location, which is a file again, just
+  one meida controls. **Deferred 2026-11-15 (user): settle it when BLS is taken up.** It does
+  not block BIS or FBI — at 26,902 and 3,886 entries, ordinary pagination is unremarkable, and
+  nothing else in the requirement depends on the answer. Order the work BIS → FBI → BLS and
+  the question arrives last, with two worked examples behind it.
 - **Tiingo has no catalogue at all.** A gap rather than a file problem, so "everything over
   MCP" does not by itself say what to do. Scope it in or out explicitly.
 - **CDC stops being provisional.** `series-catalog.md` says its Socrata rows are there only

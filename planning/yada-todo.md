@@ -679,6 +679,10 @@ those three are raw acquisition artefacts, not a serving path.
    survey layer *is* already on MCP (`bls_all_surveys`, `bls_survey_info`), but the catalogue
    does not use it: `survey.yaml` joins `overview.txt` with per-survey `.series` stats and the
    fetch manifest, because the MCP version carries two fields where the catalogue needs ten.
+   **Designed 2026-11-22, then deferred** — see
+   [bls-catalogue-over-mcp.md](bls-catalogue-over-mcp.md) for the measured inventory, the
+   two-tool contract and why `series_catalog` is the wrong target. Deferred until FRED is
+   working over yada's MCP and the other stores have been worked through.
 4. **FRED — superseded, not migrated.** meida's catalogue is 220,401 series in 944 categories
    and deliberately partial, skipping `27281 States`, `32071 Federal Reserve Districts` and
    `32233 Freddie Mac Regions`. Its named consumer is **yada's `fred_document_loader`**. yada's

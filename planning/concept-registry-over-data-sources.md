@@ -56,6 +56,22 @@ So the shape is a small **registry that the catalogs are joined to**, not a
 layer derived from them. That inverts the cost: the registry is tens of rows,
 hand-written, and the catalogs stay untouched.
 
+**Absence is not representable in any store or on any tool**, which is the
+narrower and defensible version of this argument. Searched on 2026-11-27: across
+both databases there is no table and no column in which "a measure I want and do
+not have" can be stored. The only `status` columns are
+`fred_category_scan.status` and `fred_subcategory_build.status`, both tracking a
+build process rather than model coverage, and `series_catalog.is_active` is
+**NULL on all 13,967 rows**. All 32 MCP tools enumerate what exists; none takes
+a "what should exist" input.
+
+But do not overstate it: the inventory *does* exist, in prose and in the `NODES`
+literal, and §9 records that a single pass reproduced it. The registry would
+**relocate** that knowledge into something addressable, not create it. The real
+gap is that the two files holding it are gitignored and on one machine, so no
+second reader and no agent can reach them — and the cheapest fix for *that* is
+`git add -f` or a tracked table, not a schema.
+
 ## 2. What already exists
 
 Three pieces, none connected to the others.
@@ -78,11 +94,13 @@ sources — but it is a *per-source* vocabulary, not a shared one:
 | clio_historical | 391 | 3 |
 | voteview | 8 | 1 |
 
-103 distinct labels over 13,967 rows, and they do not join. Exactly **three**
-labels collide across sources, and all three are clio ↔ clio_historical — the
-same vendor in two eras (`exchange_rates_to_uk_pound`, `labourers_real_wage`,
+The column sums to 103, but **100 globally distinct labels** over 13,967 rows —
+the three-label difference is the whole story. Exactly **three** labels collide
+across sources, and all three are clio ↔ clio_historical, the same vendor in two
+eras (`exchange_rates_to_uk_pound`, `labourers_real_wage`,
 `number_of_days_lost_in_labour_disputes`). Between genuinely different vendors:
-**zero collisions**. Meanwhile the semantic overlap is obvious and unexploited —
+**zero collisions**. Quote 100 when counting the vocabulary and 103 only when
+summing the table above. Meanwhile the semantic overlap is obvious and unexploited —
 cdc `life_expectancy` against clio `life_expectancy_at_birth_total` /
 `male_` / `female_`; cdc `homicide` against clio `homicide_rates`.
 
@@ -104,15 +122,68 @@ element to each tuple: a selector string**, empty for the unacquired nodes. Then
 write a sibling `coverage_check.py`, roughly sixty lines, that:
 
 1. resolves every non-empty selector against `series_catalog`,
-2. compares `observation_start` / `observation_end` and row counts against the
+2. **splits declared from stored** — see the trap below; this clause is not
+   optional,
+3. compares `observation_start` / `observation_end` and row counts against the
    declared spans,
-3. prints what disagrees, and **exits non-zero**,
-4. regenerates the coverage chart from the same literal, so the image becomes a
+4. prints what disagrees, and **exits non-zero**,
+5. regenerates the coverage chart from the same literal, so the image becomes a
    derived output rather than a parallel truth.
 
-That delivers everything §4 would, except the external concept anchors, at the
-cost of an hour — no table, no migration, no MCP tool, no new dependency — and
-it leaves the artifact in the directory where its only reader already lives.
+**The trap that makes a naive version worse than nothing.** `series_catalog`
+holds *vendor-declared* metadata, not what is stored. `retrieval->>'tool'` is
+100% populated with exactly two values, and it splits the table:
+
+| source | retrieval tool | rows | meaning |
+| --- | --- | --- | --- |
+| cdc | `cdc_series_data` | 2,346 | one live call away; **nothing stored** |
+| cdc | `timeseries_source_data` | 180 | stored |
+| clio | `timeseries_source_data` | 11,042 | stored |
+| clio_historical | `timeseries_source_data` | 391 | stored |
+| voteview | `timeseries_source_data` | 8 | stored |
+
+The Suicide node is the proof case. It declares `1950–2024, LOADED`. The catalog
+envelope for `source='cdc' concept='suicide'` is 1950-01-01 … 2025-07-01 over 77
+rows — so a check written to compare against that envelope **reports the
+declaration fine**. But 76 of those 77 rows are `cdc_series_data`; exactly
+**one** is stored. A check without the split would pass the one declaration that
+is provably wrong. The discriminator already exists on the MCP surface:
+`series_catalog_search` takes a `timeseries_source=` parameter, and
+`meida/mcp_server/series_catalog.py:136` documents the related join-key trap.
+
+**Scope it honestly: this checks about ten nodes, not 35.** Sixteen of the 35
+carry a loaded or partial span; **six of those are BLS-backed with zero `bls`
+rows in `series_catalog`**, so a check scoped to that table reports them empty
+and is wrong. The FBI harvest is the same error in the same direction — built,
+3,886 entries in gitignored YAML, no `fbi` rows. Both error directions appear in
+one question, so the script must **distinguish "no data" from "not loaded here"**
+and say which it found.
+
+**And nothing invokes it.** There is no `.github/` in sefer or meida, no git
+hooks, no pre-commit config, and no scheduler entry. The script would be run by
+the same hand that has not run the chart generator in 68 days, so "drift that
+announces itself" is not what this buys. What it buys is the **selector written
+down** — node → (source, concept, facet filter, stored-vs-live, provisional
+policy) — which converts tacit knowledge into something a second reader or an
+agent can execute. That is the honest value, and it is still worth the hour.
+
+**One implementation gotcha, found the hard way.** `ast.literal_eval` **fails**
+on the `NODES` literal — the status slot holds a module constant
+(`LOADED`/`PARTIAL`/`AVAILABLE`/`NONE`), not a literal, so it raises
+`malformed node`. Either `eval` the expression with
+`{LOADED: 3, PARTIAL: 2, AVAILABLE: 1, NONE: 0}` injected, or import the module
+and read `NODES` off it. Importing is cleaner, and avoids the literal and the
+constants drifting apart.
+
+Also budget more than the hour the first draft claimed: the stored-vs-live
+clause, the not-loaded-here distinction and the label-to-slug mapping are the
+real work. Two or three hours is honest, and the mapping is the part only you
+can do — a mechanical match resolves **1 of 35** labels, because
+`series_catalog_search` compares `concept` by exact equality, and token overlap
+resolves 14 of 35 mostly wrongly (`Credential production` matches
+`aluminium_production`). `Polarisation, roll-call` scores zero against its own
+loaded data, because the catalog slug is `congressional_polarization` and the
+label is spelled the British way.
 
 Record the two good ideas from §4 as one sentence each in the script's
 docstring rather than as columns, so they are not lost:
@@ -123,8 +194,9 @@ docstring rather than as columns, so they are not lost:
   extensions — so a list of series ids spanning the two databases could never
   be joined. A stored query also absorbs new vendor series without a resync.
 - **`origin` is not `source`.** FRED republishing BLS is one origin, not two
-  confirmations. Two bindings sharing an origin are not independent
-  corroboration.
+  confirmations. But note §9: for direct republications this is **already
+  recoverable** from `fred_series.notes`, so the rule is about what to do with
+  the fact, not about discovering it.
 
 ## 4. The deferred design
 
@@ -152,12 +224,17 @@ CREATE TABLE concept_binding (
     selector   jsonb NOT NULL,  -- HOW to find the series, never WHICH series
     era_start  int,
     era_end    int,
-    status     text NOT NULL,   -- 'loaded' | 'partial' | 'available' | 'empty'
+    -- NOT a four-value enum. See the two corrections below.
+    status     text NOT NULL,   -- 'stored' | 'live' | 'harvested_uncatalogued'
+                                -- | 'partial' | 'absent'
+    tier       smallint,        -- acquisition effort, 1-4; NULL when status='stored'
     rationale  text NOT NULL DEFAULT '',   -- required when kind = 'proxy_for'
     series_count    int,
     last_checked_at timestamptz,
     CONSTRAINT ck_cb_kind   CHECK (kind IN ('measures','proxy_for','derived_from')),
-    CONSTRAINT ck_cb_status CHECK (status IN ('loaded','partial','available','empty')),
+    CONSTRAINT ck_cb_status CHECK (status IN
+        ('stored','live','harvested_uncatalogued','partial','absent')),
+    CONSTRAINT ck_cb_tier   CHECK (tier IS NULL OR tier BETWEEN 1 AND 4),
     CONSTRAINT ck_cb_rationale CHECK (kind <> 'proxy_for' OR length(rationale) > 0)
 );
 CREATE INDEX idx_cb_node     ON concept_binding (node_id);
@@ -171,6 +248,33 @@ A selector names a source and a filter, not series ids:
 {"db": "meida", "source": "clio", "concept": "homicide_rates", "facets": {"ccode": 840}}
 {"mcp": "yada", "tool": "search_fred", "series_id": "FYFSGDA188S"}
 ```
+
+**Two corrections to the first draft of this DDL, both found by attempting the
+capabilities in §9.**
+
+*The status enum had three states and needs five.* The first draft used
+`loaded | partial | available | empty`, which conflates two distinctions that
+matter. First, 2,346 CDC rows are **one live `cdc_series_data` call away** —
+neither stored nor absent, and reading "zero observations stored" as "no data"
+is simply wrong for them. Second, the FBI harvest is **built but uncatalogued**,
+which is a loading gap, not a data gap, and must not be reported as absence.
+
+*`status='available'` would destroy the best artifact in the project.* The
+research note's coverage section is not the 35 tuples — it is a **four-tier,
+effort-ordered acquisition plan**, where tier 1 is "client already built" and
+tier 4 is "paywalled; three sources, three definitions, no continuous series".
+A single `available` value collapses tier 1 and tier 4 into one, which is the
+most decision-relevant structure in the repo. Hence the `tier` column, and hence
+the warning: `NODES` is **already a lossy render** of that prose, and a `note`
+column would be lossier still. The prose stays authoritative.
+
+*Still missing, and needed by the two named downstream consumers.* The SDT plan
+assigns navi "drivers → Political Stress Index" and yada "splice historical +
+contemporary". This DDL carries no units, no **direction of effect** (the SDT
+doc has a literal Direction column), and no transform or weight. Without those
+the registry tells those two consumers "here are the two series", which is what
+the free-text note already says. Add them before claiming the registry serves
+the model.
 
 Three decisions carry the weight:
 
@@ -188,7 +292,7 @@ Three decisions carry the weight:
   built yet anyway — `fred_series` has no source or release field, and BLS is
   loaded nowhere. See [known-issues.md](../known-issues.md) for the
   value-fingerprint recipe to use when BLS lands.
-- **Population is by hand.** A text crosswalk from meida's 103 slugs to FRED's
+- **Population is by hand.** A text crosswalk from meida's 100 slugs to FRED's
   derived nodes was measured at 24 matches, of which roughly 6–8 are correct
   *(carried, unverified)*; `inflation` resolved to thousands of nodes. A
   crosswalk is a candidate generator, not a population method.
@@ -247,7 +351,7 @@ the serving path and synonym quality becomes the limiting factor.
   overkill.
 - **A custom Data Commons instance.** Containers plus Cloud SQL to re-host data
   already owned.
-- **An embedding or synonym layer for meida's 103 slugs.** The entire vocabulary
+- **An embedding or synonym layer for meida's 100 slugs.** The entire vocabulary
   fits in a tool description. meida has no embedding dependency at all, and
   adding one for 35 nodes is absurd.
 - **A query-time write path for demand-driven nodes.** Concurrent sessions
@@ -308,3 +412,94 @@ transcribed from a sentence in the research note that the database contradicts.
 A rate-basis mismatch is the one error class here that yields a *wrong number*
 rather than a missing one, so it still needs solving — but it cannot be solved
 by a filter over data that is not there.
+
+## 9. What this makes possible that is not possible now
+
+Tested on **2026-11-27** by attempting seven candidate capabilities against the
+live databases and the 32-tool MCP surface, then attacking the result. The
+verdicts below are deflationary on purpose: an inflated answer here costs more
+than a thin one.
+
+**The honest total: close to nothing, as first worded.** Two of the three
+capabilities claimed in the first draft of this section were wrong, and both
+corrections are recorded below rather than quietly removed.
+
+### What survives
+
+**One item, in modified form: a machine-readable record that a variable should
+exist and does not — discriminated by acquisition tier and by
+stored-vs-live-vs-absent.** That record exists nowhere (§1), and the five-state
+`status` plus `tier` in §4 is the shape it needs. Its honest caveat is that the
+**consumer set is empty, not small**: meida registers 32 tools, zero
+`@resource` and zero `@prompt`; there is no `.mcp.json` in any of the four
+repos; `~/.claude.json` carries `mcpServers: []`; and yada's only MCP-consuming
+agent names four tools. So a 34th tool would have no caller, and every agent
+class that actually exists today reaches files with Bash and psql — for which
+`git add -f` on the two gitignored files delivers more, sooner.
+
+**And the selector, written down.** Not a capability the system gains, but the
+thing that converts five tacit conventions per node — source, concept slug,
+facet filter, stored-vs-live, provisional policy — into something a second
+reader or an agent can execute. This is what §3 actually buys, and it is why §3
+is still worth the hour.
+
+### Corrections to the first draft of this section
+
+**"Drift that announces itself" — strike "announces".** There is no invoker:
+no `.github/` in sefer or meida, no git hooks, no pre-commit config, no
+scheduler entry. A script exiting non-zero is run by the same hand that has not
+run the chart generator in 68 days. Automated detection is not what this buys;
+see §3 for what does.
+
+**"Independence cannot be determined today" — false, and this was the worst
+error.** The FRED-republishes-BLS mapping is recoverable right now:
+
+```sql
+select series_id, (regexp_match(notes, 'The source code is: *([A-Za-z0-9_.]+)'))[1]
+from fred_series where series_id in ('UNRATE', 'PAYEMS');
+--  UNRATE | LNS14000000
+--  PAYEMS | CES0000000001
+```
+
+**7,268** `fred_series` rows carry a recoverable source code that way. (Not all:
+`CPIAUCSL` returns null, so the recoverable set is the direct republications
+rather than the computed ones.) Independence between two *stored* sources is
+also computable today by unnesting observations and comparing the overlap years
+— which beats a hand-typed column, because it is derived rather than asserted.
+So `origin` stores an assertion the system could in many cases check itself.
+
+### `origin` should be promoted, but re-aimed
+
+The one place in the project where an origin ranking is **measured, falsifiable
+and has money attached** is prediction-market settlement, not homicide. The
+Polymarket/Kalshi plan records that `KXCPIYOY` settles against BLS CPI-U, and
+that BLS's own published twelve-month change reproduces **45 of 45** checkable
+settlements against **33 of 45** for the seasonally adjusted FRED series. That
+is an authority ranking over an origin with a scoring rule — the only consumer
+in the repo with a decision attached to it. If `origin` and `authority` ever
+ship, ship them there and score them against settlement history.
+
+### Already possible — do not claim these
+
+- **Cross-era retrieval within meida**, in one query, because clio and cdc share
+  a database: `concept in ('homicide','homicide_rates')` with a ccode/geography
+  filter returns clio 1900–2010 and cdc 1999–2024 together. The only
+  prerequisite was knowing two slug names.
+- **Discovering the vocabulary without knowing a slug** — `series_catalog_concepts`
+  is a shipped tool returning all 108 `(concept, dataset_id, series_count)` rows
+  in one call. `series_count` and freshness fields in §4 duplicate what it and
+  `timeseries_source_stale` already provide.
+- **The SDT driver-to-proxy mapping with an argument per proxy** — already prose
+  with literal rationales in the SDT plan. Rows plus a CHECK constraint is a
+  filing change, not a new capability.
+- **Text search for a concept across meida** — a one-line `ILIKE` returns 264
+  rows for poverty today. Note that poverty is not one of the 35 nodes, which is
+  the more useful finding.
+
+### What nothing here enables
+
+Acquiring the 19 missing datasets — the registry names a gap, it does not close
+it. Better search within a source, which the 58,227-node FRED layer already does
+and which is merely unplugged. The splice itself: era bounds say which two
+series to join, never how. And the Political Stress Index, until units,
+direction of effect and weights are added (§4).

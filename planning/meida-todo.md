@@ -189,19 +189,29 @@ measured inventory, the two-table design and why deriving a concept layer from t
 answers the wrong question. Deferred behind the same sequence as the BLS catalogue: document
 search first, then FRED over yada's MCP, then the other stores.
 
-Three things to pick up, in this order, and the first two are not the registry:
+Four things to pick up, in this order, and the first three are not the registry:
 
 1. **The cheap version, now.** Add a selector string per node to the gitignored coverage
-   script and write a ~60-line check that resolves each one against `series_catalog`,
-   compares the declared spans to live bounds, and exits non-zero. One sitting, no schema,
-   no MCP tool. It delivers everything the registry would except the external concept
-   anchors, and the node list it needs already exists.
+   script and write a check that resolves each one against `series_catalog`, compares the
+   declared spans to live bounds, and exits non-zero. No schema, no MCP tool, and the node
+   list it needs already exists. Two or three hours, not one — and **it must split declared
+   from stored** via `retrieval->>'tool'`, or it is worse than nothing: the Suicide node's
+   catalog envelope spans 1950–2025 across 77 rows while exactly **one** of those rows is
+   stored, so a naive check passes the one declaration that is provably wrong. Scope is
+   about ten nodes, not 35. See §3 of the design doc.
 2. **Land the series-catalog quality-fields CR — worth more than the registry.** The FBI
    client is built and its catalog entries sit in gitignored YAML; there are **no `fbi` rows
    in `series_catalog`**. Three of the nodes recorded as "available, not acquired" actually
    have data that cannot be reached, so any coverage check against the table today reports
-   "still empty" and is wrong.
-3. **Then the registry**, if a cross-source concept question is ever actually asked. Only
+   "still empty" and is wrong. Six further nodes are BLS-backed with no `bls` rows, the same
+   error in the same direction.
+3. **`git add -f` the two gitignored files, or publish a tracked table.** The one real gap
+   the registry addresses is that the inventory is unreachable by anything but the author on
+   this machine. Every agent class that exists today reaches files with Bash and psql, so
+   this delivers more than an MCP tool would, sooner. meida registers 32 tools, zero
+   `@resource`, there is no `.mcp.json` in any of the four repos, and yada's only
+   MCP-consuming agent names four tools — so a 34th tool's consumer set is empty, not small.
+4. **Then the registry**, if a cross-source concept question is ever actually asked. Only
    about 9 of the 35 nodes need cross-source resolution at all. If that stays true and
    nothing queries it, item 1 is the whole project.
 

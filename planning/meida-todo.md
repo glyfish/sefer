@@ -178,3 +178,34 @@ day: yada's prod sat at revision `0001` while dev was at `0003`, two migrations 
 only reason it surfaced was `verify_database` refusing to start. A third environment makes that
 more likely, not less. Whatever is built here, make the off-head check loud and make `dev` the
 default.
+
+---
+
+## 5. Revisit the concept registry over the data sources
+
+**Designed 2026-11-27, then deferred** — see
+[concept-registry-over-data-sources.md](concept-registry-over-data-sources.md) for the
+measured inventory, the two-table design and why deriving a concept layer from the catalogs
+answers the wrong question. Deferred behind the same sequence as the BLS catalogue: document
+search first, then FRED over yada's MCP, then the other stores.
+
+Three things to pick up, in this order, and the first two are not the registry:
+
+1. **The cheap version, now.** Add a selector string per node to the gitignored coverage
+   script and write a ~60-line check that resolves each one against `series_catalog`,
+   compares the declared spans to live bounds, and exits non-zero. One sitting, no schema,
+   no MCP tool. It delivers everything the registry would except the external concept
+   anchors, and the node list it needs already exists.
+2. **Land the series-catalog quality-fields CR — worth more than the registry.** The FBI
+   client is built and its catalog entries sit in gitignored YAML; there are **no `fbi` rows
+   in `series_catalog`**. Three of the nodes recorded as "available, not acquired" actually
+   have data that cannot be reached, so any coverage check against the table today reports
+   "still empty" and is wrong.
+3. **Then the registry**, if a cross-source concept question is ever actually asked. Only
+   about 9 of the 35 nodes need cross-source resolution at all. If that stays true and
+   nothing queries it, item 1 is the whole project.
+
+**Before writing any selector, verify the facet filter against live data.** The first draft
+specified `rate_type=crude` for the CDC homicide binding; that matches zero rows — the facet
+key is `measure`, and no crude variant is stored. It had been transcribed from a prose
+sentence the database contradicts.
